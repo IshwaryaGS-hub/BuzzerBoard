@@ -41,6 +41,7 @@ function playTimesUpAlarm() {
 export default function LeaderboardPage() {
   const [state, setState] = useState(null);
   const [now, setNow] = useState(Date.now());
+  const [showTimeUpOrder, setShowTimeUpOrder] = useState(false);
   const timesUpTriggeredRef = useRef(false);
   const frontScreenAuth = sessionStorage.getItem("frontScreenAuth") || "";
 
@@ -72,7 +73,7 @@ export default function LeaderboardPage() {
   }, [frontScreenAuth]);
 
   useEffect(() => {
-    if (state?.phase !== "question" && state?.phase !== "buzzed") return undefined;
+    if (state?.phase !== "question" && state?.phase !== "buzzed" && state?.phase !== "timeup") return undefined;
 
     const intervalId = window.setInterval(() => {
       setNow(Date.now());
@@ -87,6 +88,7 @@ export default function LeaderboardPage() {
   }, [state]);
 
   const question = state?.currentQuestion || null;
+  const currentQuestionNumber = Math.max((state?.currentQuestionIndex ?? -1) + 1, 0);
   const buzzCount = state?.buzzerHistory?.length || 0;
   const timeElapsed = state?.timerStartedAt
     ? Math.min((now - state.timerStartedAt) / 1000, state.timeLimit || 0)
@@ -95,8 +97,52 @@ export default function LeaderboardPage() {
   const latestResult = state?.questionResults?.length
     ? state.questionResults[state.questionResults.length - 1]
     : null;
-  const showAnswerReveal = state?.phase === "answer" && question;
-  const showTimeUp = showAnswerReveal && !latestResult;
+  const completedQuestions = state?.questionResults?.length || 0;
+  const showAnswerReveal = Boolean(state?.answerRevealed && question);
+  const showTimeUp = state?.phase === "timeup" && question && !state?.answerRevealed;
+  const roundBreakActive = state?.phase === "answer" && Boolean(latestResult?.dashboardAfter);
+  const showDashboard =
+    sortedTeams.length > 0 &&
+    ((roundBreakActive && completedQuestions > 0) || state?.phase === "finished");
+  const showAnswerPanel = Boolean(state?.phase === "answer" && latestResult && !showDashboard);
+  const showQuestionBoard =
+    Boolean(question) &&
+    !showDashboard &&
+    !showTimeUp &&
+    !showAnswerPanel &&
+    (state?.phase === "question" || state?.phase === "buzzed" || state?.phase === "answer");
+  const winningBuzzEntry = latestResult?.winner
+    ? (state?.buzzerHistory || []).find((entry) => entry.teamName === latestResult.winner) || null
+    : null;
+  const dashboardTitle =
+    latestResult?.dashboardTitle || (state?.phase === "finished" ? "Quiz Complete" : "Score Dashboard");
+  const dashboardSubtitle =
+    latestResult?.dashboardSubtitle ||
+    (state?.phase === "finished"
+      ? "Final team standings after the quiz."
+      : "Live standings after the latest completed block.");
+  const leaderScore = sortedTeams[0]?.[1]?.score || 0;
+  const topThreeTeams = sortedTeams.slice(0, 3);
+  const dashboardStats = [
+    {
+      label: "Questions Done",
+      value: completedQuestions,
+    },
+    {
+      label: "Current Leader",
+      value: sortedTeams[0]?.[1]?.teamName || "Waiting",
+    },
+    {
+      label: latestResult?.isSample ? "Sample Mode" : "Points Per Win",
+      value: latestResult?.isSample ? "No Score" : `${latestResult?.awardedPoints || 10} pts`,
+    },
+  ];
+  const getRankMedalClass = (index) => {
+    if (index === 0) return "gold";
+    if (index === 1) return "silver";
+    if (index === 2) return "bronze";
+    return "default";
+  };
 
   useEffect(() => {
     if (showTimeUp && !timesUpTriggeredRef.current) {
@@ -110,10 +156,122 @@ export default function LeaderboardPage() {
     }
   }, [showTimeUp]);
 
-  return (
-    <div className="quiz-shell quiz-stage-shell" style={{ minHeight: "100vh", padding: "28px 22px 40px" }}>
-      <div style={{ maxWidth: "1540px", margin: "0 auto" }}>
+  useEffect(() => {
+    if (!showTimeUp) {
+      setShowTimeUpOrder(false);
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setShowTimeUpOrder(true);
+    }, 2200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [showTimeUp]);
+
+  const renderBuzzOrderPanel = ({ title, subtitle, winnerName = null }) => (
+    <div
+      style={{
+        padding: "22px 24px",
+        borderRadius: "20px",
+        border: "1px solid rgba(255,255,255,0.08)",
+        background: "rgba(255,255,255,0.04)",
+        color: "var(--white)",
+      }}
+    >
+      <div style={{ color: "var(--amber)", letterSpacing: "0.22em", textTransform: "uppercase", fontSize: "12px", marginBottom: "12px" }}>
+        {title}
+      </div>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: "12px",
+          flexWrap: "wrap",
+          marginBottom: "14px",
+          color: "var(--muted)",
+          fontSize: "13px",
+        }}
+      >
+        <span>{subtitle}</span>
+        <span>Question {currentQuestionNumber}</span>
+      </div>
+      {state?.buzzerHistory?.length ? (
         <div
+          style={{
+            borderRadius: "16px",
+            overflow: "hidden",
+            border: "1px solid rgba(255,255,255,0.08)",
+            background: "rgba(9, 14, 28, 0.24)",
+          }}
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "110px 1fr 180px",
+              gap: "12px",
+              padding: "14px 18px",
+              background: "rgba(255,255,255,0.04)",
+              color: "var(--muted)",
+              fontSize: "12px",
+              letterSpacing: "0.18em",
+              textTransform: "uppercase",
+            }}
+          >
+            <span>Order</span>
+            <span>Team</span>
+            <span style={{ textAlign: "right" }}>Buzz Time</span>
+          </div>
+
+          {state.buzzerHistory.map((entry, index) => {
+            const isWinner = Boolean(winnerName && entry.teamName === winnerName);
+            return (
+              <div
+                key={entry.id || `${entry.teamId}-${index}`}
+                className={isWinner ? "winner-row-blink" : ""}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "110px 1fr 180px",
+                  gap: "12px",
+                  alignItems: "center",
+                  padding: "16px 18px",
+                  borderTop: `1px solid ${isWinner || index === 0 ? "rgba(58,212,138,0.2)" : "rgba(255,255,255,0.06)"}`,
+                  background: isWinner || index === 0 ? "rgba(58,212,138,0.08)" : "transparent",
+                }}
+              >
+                <span style={{ fontSize: "24px", fontWeight: 900, color: isWinner || index === 0 ? "var(--green)" : "var(--amber)" }}>
+                  #{index + 1}
+                </span>
+                <span style={{ fontSize: "clamp(20px, 1.8vw, 28px)", fontWeight: 800 }}>
+                  {entry.teamName}
+                </span>
+                <span
+                  style={{
+                    textAlign: "right",
+                    fontSize: "clamp(20px, 1.8vw, 28px)",
+                    fontWeight: 800,
+                    color: isWinner || index === 0 ? "var(--green)" : "var(--white)",
+                  }}
+                >
+                  {(entry.timeMs / 1000).toFixed(2)}s
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div style={{ padding: "20px 18px", color: "var(--muted)", fontSize: "18px" }}>
+          Waiting for the first team to buzz.
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="quiz-shell quiz-stage-shell frontboard-shell" style={{ minHeight: "100vh", padding: "28px 22px 40px" }}>
+      <div className="frontboard-frame" style={{ maxWidth: "1540px", margin: "0 auto" }}>
+        <div
+          className="frontboard-header"
           style={{
             display: "grid",
             gridTemplateColumns: "1fr auto",
@@ -124,16 +282,16 @@ export default function LeaderboardPage() {
         >
           <div>
             <div className="championship-eyebrow" style={{ marginBottom: "10px" }}>Organizer Screen</div>
-            <div style={{ fontSize: "clamp(44px, 6vw, 84px)", fontWeight: 900, lineHeight: 0.94 }}>
+            <div className="frontboard-title" style={{ fontSize: "clamp(44px, 6vw, 84px)", fontWeight: 900, lineHeight: 0.94 }}>
               LIVE <span style={{ color: "var(--amber)" }}>QUIZ BOARD</span>
             </div>
-            <p style={{ marginTop: "10px", color: "var(--muted)", fontSize: "18px", lineHeight: 1.5, maxWidth: "760px" }}>
+            <p className="frontboard-subtitle" style={{ marginTop: "10px", color: "var(--muted)", fontSize: "18px", lineHeight: 1.5, maxWidth: "760px" }}>
               Welcome to the APAR Cable Solutions Quiz Championship.
             </p>
           </div>
 
           <div className="quiz-hud-side" style={{ justifySelf: "end" }}>
-            <div className={`timer-mini ${timeLeft <= 8 && (state?.phase === "question" || state?.phase === "buzzed") ? "alert" : ""}`}>
+            <div className={`timer-mini ${timeLeft <= 8 && (state?.phase === "question" || state?.phase === "buzzed" || state?.phase === "timeup") ? "alert" : ""}`}>
               <div style={{ textAlign: "center" }}>
                 <div className="value">{Math.ceil(timeLeft || 0)}</div>
                 <div className="label">Seconds</div>
@@ -147,6 +305,7 @@ export default function LeaderboardPage() {
         </div>
 
         <div
+          className="frontboard-statusbar"
           style={{
             display: "flex",
             gap: "18px",
@@ -160,7 +319,7 @@ export default function LeaderboardPage() {
           }}
         >
           <div><span style={{ color: "var(--muted)", fontSize: "12px" }}>Phase </span><strong style={{ color: "var(--amber)", textTransform: "uppercase" }}>{state?.phase || "lobby"}</strong></div>
-          <div><span style={{ color: "var(--muted)", fontSize: "12px" }}>Question </span><strong>{Math.max((state?.currentQuestionIndex ?? -1) + 1, 0)} / {state?.totalQuestions || "-"}</strong></div>
+          <div><span style={{ color: "var(--muted)", fontSize: "12px" }}>Question </span><strong>{currentQuestionNumber} / {state?.totalQuestions || "-"}</strong></div>
           <div><span style={{ color: "var(--muted)", fontSize: "12px" }}>Buzzers </span><strong style={{ color: state?.buzzerLocked ? "var(--red)" : "var(--green)" }}>{state?.buzzerLocked ? "LOCKED" : "OPEN"}</strong></div>
           <div><span style={{ color: "var(--muted)", fontSize: "12px" }}>Players </span><strong>{Object.keys(state?.playerStats || {}).length}</strong></div>
         </div>
@@ -169,20 +328,96 @@ export default function LeaderboardPage() {
           <section className="championship-hero" style={{ minHeight: "70vh" }}>
             <div className="championship-eyebrow">Ready Room</div>
             <div className="championship-stack">
-              <div className="championship-kicker">Quiz</div>
-              <div className="championship-headline">Starting Soon</div>
+              <div className="championship-kicker">Front Screen</div>
+              <div className="championship-headline">Quiz Will Be Started Soon</div>
             </div>
             <p className="championship-subline">
-              Teams are joining. The host will start the first question shortly.
+              Teams are joining and the host will begin with the sample round shortly.
             </p>
           </section>
         )}
 
-        {(state?.phase === "question" || state?.phase === "buzzed") && question && (
+        {showDashboard ? (
+          <section className="round-dashboard">
+            <div className="round-dashboard-hero">
+              <div>
+                <div className="championship-eyebrow" style={{ marginBottom: "10px" }}>Dashboard</div>
+                <div className="round-dashboard-title">{dashboardTitle}</div>
+                <p className="round-dashboard-subtitle">{dashboardSubtitle}</p>
+              </div>
+              <div className="round-dashboard-badge">
+                {latestResult?.isSample ? "Practice Block" : state?.phase === "finished" ? "Final Standings" : latestResult?.roundName || "Round Standings"}
+              </div>
+            </div>
+
+            <div className="round-dashboard-stats">
+              {dashboardStats.map((item) => (
+                <div key={item.label} className="round-stat-card">
+                  <div className="round-stat-label">{item.label}</div>
+                  <div className="round-stat-value">{item.value}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="round-dashboard-grid">
+              <div className="podium-strip">
+                {topThreeTeams.map(([teamId, team], index) => (
+                  <div key={teamId} className={`podium-mini-card rank-${index + 1}`}>
+                    <div className={`rank-medal ${getRankMedalClass(index)}`}>{index + 1}</div>
+                    <div className="podium-mini-name">{team.teamName}</div>
+                    <div className="podium-mini-meta">
+                      {team.correctAnswers ?? 0} correct
+                    </div>
+                    <div className="podium-mini-score">{team.score}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="round-standings-panel">
+                <div className="round-standings-head">
+                  <span>Team Standings</span>
+                  <span>{latestResult?.isSample ? "Sample scores remain unchanged" : "Updated after this block"}</span>
+                </div>
+
+                <div className="leaderboard-list compact">
+                  {sortedTeams.map(([teamId, team], index) => (
+                    <div
+                      key={teamId}
+                      className={`leaderboard-row ${index === 0 ? "leader" : ""}`}
+                    >
+                      <div className={`rank-medal ${getRankMedalClass(index)}`}>{index + 1}</div>
+                      <div>
+                        <div style={{ fontSize: "clamp(22px, 1.8vw, 30px)", fontWeight: 800 }}>{team.teamName}</div>
+                        <div style={{ marginTop: "6px", color: "var(--muted)", fontSize: "14px" }}>
+                          {team.correctAnswers ?? 0} correct answers
+                        </div>
+                      </div>
+                      <div style={{ color: "var(--muted)", fontSize: "15px" }}>
+                        {index === 0
+                          ? latestResult?.isSample
+                            ? "Practice leader"
+                            : "Current leader"
+                          : `Behind leader by ${Math.max(leaderScore - (team.score || 0), 0)} pts`}
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontSize: "clamp(30px, 3vw, 44px)", fontWeight: 900, color: index === 0 ? "var(--amber)" : "var(--white)" }}>
+                          {team.score}
+                        </div>
+                        <div style={{ color: "var(--muted)", fontSize: "12px", letterSpacing: "0.18em", textTransform: "uppercase" }}>
+                          points
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+        ) : showQuestionBoard && (
           <section className="question-stage">
             <div className="question-stage-topbar">
               <div className="stage-progress-label">
-                Question {Math.max((state?.currentQuestionIndex ?? -1) + 1, 0)} / {state?.totalQuestions}
+                Question {currentQuestionNumber} / {state?.totalQuestions}
               </div>
               <div className="stage-category-pill">{question.category || "Live Round"}</div>
             </div>
@@ -218,46 +453,57 @@ export default function LeaderboardPage() {
               ))}
             </div>
 
-            {state?.buzzedBy && (
-              <div
-                style={{
-                  padding: "20px 24px",
-                  borderRadius: "20px",
-                  border: "1px solid rgba(58,212,138,0.35)",
-                  background: "rgba(58,212,138,0.08)",
-                  color: "var(--white)",
-                }}
-              >
-                <div style={{ color: "var(--green)", letterSpacing: "0.22em", textTransform: "uppercase", fontSize: "12px", marginBottom: "8px" }}>
-                  Fastest Current Buzzer
-                </div>
-                <div style={{ fontSize: "clamp(28px, 3vw, 46px)", fontWeight: 900 }}>
-                  {state.buzzedBy.memberName}
-                </div>
-                <div style={{ marginTop: "6px", color: "var(--muted)", fontSize: "18px" }}>
-                  {state.buzzedBy.teamName} | {(state.buzzedBy.timeMs / 1000).toFixed(2)}s
-                </div>
-              </div>
-            )}
+            {renderBuzzOrderPanel({
+              title: "Buzzer Sequence",
+              subtitle:
+                state?.phase === "answer"
+                  ? "Verbal answer round summary"
+                  : question.category || "Live Round",
+            })}
           </section>
         )}
 
         {showTimeUp && (
           <div className="timeup-screen">
-            <div>
-              <div className="timeup-icon">!</div>
+            <div style={{ width: "min(100%, 1100px)" }}>
+              <div className="timeup-icon" aria-hidden="true">
+                <div className="alarm-clock">
+                  <div className="alarm-bell alarm-bell-left" />
+                  <div className="alarm-bell alarm-bell-right" />
+                  <div className="alarm-handle" />
+                  <div className="alarm-face">
+                    <div className="alarm-hand alarm-hand-hour" />
+                    <div className="alarm-hand alarm-hand-minute" />
+                    <div className="alarm-center-dot" />
+                  </div>
+                  <div className="alarm-leg alarm-leg-left" />
+                  <div className="alarm-leg alarm-leg-right" />
+                </div>
+              </div>
               <div className="timeup-title">Time&apos;s Up!</div>
               <p className="championship-subline" style={{ marginTop: "18px", marginBottom: "20px" }}>
                 Verbal answer round is in progress. Waiting for the host to reveal the answer and announce the winner.
               </p>
               <div style={{ fontSize: "clamp(24px, 2.6vw, 44px)", fontWeight: 800, color: "var(--amber)" }}>
-                Correct answer: {question?.options?.[question.correct]}
+                Waiting for host reveal
               </div>
+              {!showTimeUpOrder ? (
+                <div className="timeup-order-hold">
+                  <div className="timeup-order-hold-text">Alarm running... preparing buzzer order</div>
+                </div>
+              ) : (
+                <div style={{ marginTop: "28px", textAlign: "left" }}>
+                  {renderBuzzOrderPanel({
+                    title: "Buzz Order",
+                    subtitle: "First to last buzzer order",
+                  })}
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {showAnswerReveal && latestResult && (
+        {showAnswerPanel && (
           <section
             className="winner-spotlight"
             style={{
@@ -271,19 +517,61 @@ export default function LeaderboardPage() {
               marginBottom: "26px",
             }}
           >
+            {latestResult?.winner && (
+              <div className="confetti-layer" aria-hidden="true">
+                {Array.from({ length: 18 }).map((_, index) => (
+                  <span
+                    key={index}
+                    className="confetti-piece"
+                    style={{
+                      left: `${6 + index * 5.2}%`,
+                      background:
+                        index % 4 === 0
+                          ? "var(--amber)"
+                          : index % 4 === 1
+                            ? "var(--green)"
+                            : index % 4 === 2
+                              ? "#f7f3ec"
+                              : "#63b5ff",
+                      "--delay": `${(index % 6) * 0.18}s`,
+                      "--duration": `${3.8 + (index % 5) * 0.35}s`,
+                      "--drift": `${index % 2 === 0 ? 50 + index * 3 : -50 - index * 3}px`,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
             <div className="winner-banner" style={{ position: "relative", zIndex: 1 }}>
               <div className="eyebrow">Round Result</div>
-              {latestResult.winner ? (
+              {latestResult?.winner ? (
                 <>
-                  <div className="headline">{latestResult.winnerPlayer || "Winner"}</div>
+                  <div className="headline winner-flash">{latestResult.winnerPlayer || "Winner"}</div>
                   <div className="subline">
-                    {latestResult.winner} | Round {Math.max((state?.currentQuestionIndex ?? -1) + 1, 0)}
+                    {latestResult.winner}
+                    {" | "}
+                    {latestResult.isSample
+                      ? "Sample Question"
+                      : latestResult.roundName || "Scored Round"}
+                    {latestResult.awardedPoints === 0
+                      ? " | No points added"
+                      : latestResult.awardedPoints < 0
+                        ? ` | ${latestResult.awardedPoints} penalty on wrong attempts`
+                        : ""}
+                  </div>
+                </>
+              ) : latestResult ? (
+                <>
+                  <div className="headline">No Winner</div>
+                  <div className="subline">
+                    {latestResult.isSample
+                      ? "Sample question completed. No team received points."
+                      : "No team received points for this verbal answer round."}
                   </div>
                 </>
               ) : (
                 <>
-                  <div className="headline">No Winner</div>
-                  <div className="subline">No team received points for this verbal answer round.</div>
+                  <div className="headline">Answer Revealed</div>
+                  <div className="subline">Waiting for the host to confirm the round result.</div>
                 </>
               )}
             </div>
@@ -298,52 +586,86 @@ export default function LeaderboardPage() {
                 textAlign: "center",
               }}
             >
-              <div style={{ color: "var(--green)", letterSpacing: "0.26em", textTransform: "uppercase" }}>
-                Correct Answer
-              </div>
-              <div style={{ fontSize: "clamp(30px, 3vw, 52px)", fontWeight: 900 }}>
-                {question?.options?.[question.correct]}
-              </div>
-              <div style={{ color: "var(--muted)", fontSize: "18px" }}>
-                {latestResult.question}
-              </div>
+              {winningBuzzEntry && (
+                <div className="winner-team-card winner-flash">
+                  <div className="winner-team-label">Winning Team</div>
+                  <div className="winner-team-name">{winningBuzzEntry.teamName}</div>
+                  <div className="winner-team-meta">
+                    {winningBuzzEntry.memberName || latestResult?.winnerPlayer || "Player"}
+                    {" | "}
+                    {(winningBuzzEntry.timeMs / 1000).toFixed(2)}s buzz time
+                  </div>
+                </div>
+              )}
+
+              {showAnswerReveal ? (
+                <>
+                  <div style={{ color: "var(--green)", letterSpacing: "0.26em", textTransform: "uppercase" }}>
+                    Correct Answer
+                  </div>
+                  <div style={{ fontSize: "clamp(30px, 3vw, 52px)", fontWeight: 900 }}>
+                    {question?.options?.[question.correct]}
+                  </div>
+                  <div style={{ color: "var(--muted)", fontSize: "18px" }}>
+                    {latestResult?.question || question?.text}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ color: "var(--green)", letterSpacing: "0.26em", textTransform: "uppercase" }}>
+                    Winner Confirmed
+                  </div>
+                  <div style={{ fontSize: "clamp(22px, 2vw, 34px)", fontWeight: 800, color: "var(--white)" }}>
+                    Host marked the correct team. Answer board will update when revealed.
+                  </div>
+                </>
+              )}
             </div>
+
+            {state?.buzzerHistory?.length ? (
+              <div className="winner-list-panel">
+                <div className="winner-list-head">
+                  <span>Buzzer Order</span>
+                  <span>Winner highlighted in green</span>
+                </div>
+                <div className="leaderboard-list compact">
+                  {state.buzzerHistory.map((entry, index) => {
+                    const isWinner = latestResult?.winner && entry.teamName === latestResult.winner;
+
+                    return (
+                      <div
+                        key={entry.id || `${entry.teamId}-${index}`}
+                        className={`leaderboard-row winner-history-row ${isWinner ? "winner-row-blink" : ""}`}
+                      >
+                        <div className={`rank-medal ${isWinner ? "gold" : "default"}`}>{index + 1}</div>
+                        <div>
+                          <div style={{ fontSize: "clamp(22px, 1.8vw, 30px)", fontWeight: 800 }}>
+                            {entry.teamName}
+                          </div>
+                          <div style={{ marginTop: "6px", color: "var(--muted)", fontSize: "14px" }}>
+                            {entry.memberName || "Player"}
+                          </div>
+                        </div>
+                        <div style={{ color: isWinner ? "#d7ffe9" : "var(--muted)", fontSize: "15px", fontWeight: isWinner ? 800 : 600 }}>
+                          {isWinner ? "Right answer awarded" : "Participated in verbal round"}
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                          <div style={{ fontSize: "clamp(28px, 2.6vw, 40px)", fontWeight: 900, color: isWinner ? "var(--green)" : "var(--white)" }}>
+                            {(entry.timeMs / 1000).toFixed(2)}s
+                          </div>
+                          <div style={{ color: "var(--muted)", fontSize: "12px", letterSpacing: "0.18em", textTransform: "uppercase" }}>
+                            buzz time
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
           </section>
         )}
 
-        <section style={{ marginTop: "28px" }}>
-          <div style={{ fontSize: "12px", letterSpacing: "0.26em", color: "var(--amber)", textTransform: "uppercase", marginBottom: "14px" }}>
-            Live Scores
-          </div>
-          <div className="leaderboard-list">
-            {sortedTeams.map(([teamId, team], index) => (
-              <div
-                key={teamId}
-                className="leaderboard-row"
-                style={{
-                  background:
-                    index === 0
-                      ? "linear-gradient(90deg, rgba(240,171,34,0.14), rgba(255,255,255,0.05))"
-                      : "linear-gradient(90deg, rgba(255,255,255,0.045), rgba(255,255,255,0.025))",
-                }}
-              >
-                <div className="rank-medal default">{index + 1}</div>
-                <div>
-                  <div style={{ fontSize: "clamp(24px, 2vw, 34px)", fontWeight: 800 }}>{team.teamName}</div>
-                  <div style={{ marginTop: "6px", color: "var(--muted)", fontSize: "14px" }}>
-                    {formatCount(team.members?.length ?? 0, "connected player")} | {team.correctAnswers ?? 0} round wins
-                  </div>
-                </div>
-                <div style={{ color: "var(--muted)", fontSize: "15px" }}>
-                  {latestResult?.winner === team.teamName ? `Latest winner: ${latestResult.winnerPlayer || "Team"}` : "Waiting for next update"}
-                </div>
-                <div style={{ textAlign: "right", fontSize: "clamp(30px, 3vw, 46px)", fontWeight: 900, color: index === 0 ? "var(--amber)" : "var(--white)" }}>
-                  {team.score}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
       </div>
     </div>
   );

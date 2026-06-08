@@ -60,7 +60,7 @@ export default function PlayerPage() {
     if (!socket.connected) socket.connect();
     socket.emit("join-player", {
       teamId: player.teamId,
-      memberName: player.memberName,
+      teamPassword: player.teamPassword,
     });
 
     socket.on("game-state", setGameState);
@@ -77,14 +77,13 @@ export default function PlayerPage() {
           teamId,
           teamName,
           memberName,
+          teamPassword: player.teamPassword,
         })
       );
     });
     socket.on("buzzer-hit", ({ teamId, memberName, timeMs, teamName }) => {
       if (teamId === player.teamId && memberName === player.memberName) {
         showNotification(`You buzzed in ${(timeMs / 1000).toFixed(2)}s`, "green");
-      } else {
-        showNotification(`${memberName} from ${teamName} buzzed in ${(timeMs / 1000).toFixed(2)}s`, "amber");
       }
       setBuzzing(false);
     });
@@ -100,8 +99,11 @@ export default function PlayerPage() {
         showNotification(`${memberName || player.memberName} won the round for ${player.teamName}`, "green");
       }
     });
-    socket.on("answer-wrong", () => {
-      showNotification("No correct verbal answer was awarded.", "red");
+    socket.on("answer-wrong", ({ hasNext } = {}) => {
+      showNotification(
+        hasNext ? "That team was wrong. Waiting for the next team." : "No correct verbal answer was awarded.",
+        "red"
+      );
     });
     socket.on("times-up", () => {
       showNotification("Time is up. Wait for the host.", "amber");
@@ -109,7 +111,7 @@ export default function PlayerPage() {
       playTimesUpAlarm();
     });
     socket.on("error", ({ message }) => {
-      if (message.includes("valid team")) {
+      if (message.includes("valid team") || message.includes("team password") || message.includes("already in use")) {
         sessionStorage.removeItem("player");
         navigateTo("/");
         return;
@@ -129,10 +131,10 @@ export default function PlayerPage() {
       socket.off("times-up");
       socket.off("error");
     };
-  }, [navigateTo, player.memberName, player.teamId, player.teamName, showNotification]);
+  }, [navigateTo, player.memberName, player.teamId, player.teamName, player.teamPassword, showNotification]);
 
   useEffect(() => {
-    if (gameState?.phase !== "question" && gameState?.phase !== "buzzed") return undefined;
+    if (gameState?.phase !== "question" && gameState?.phase !== "buzzed" && gameState?.phase !== "timeup") return undefined;
 
     const intervalId = window.setInterval(() => {
       setNow(Date.now());
@@ -175,6 +177,9 @@ export default function PlayerPage() {
     ? Math.min((now - gameState.timerStartedAt) / 1000, gameState.timeLimit)
     : 0;
   const timeLeft = Math.max(0, gameState.timeLimit - timeElapsed);
+  const currentScore = gameState?.scores?.[player.teamId]?.score || 0;
+  const currentWins = gameState?.scores?.[player.teamId]?.correctAnswers || 0;
+  const isTimeUp = gameState?.phase === "timeup";
   const notificationTone =
     notification?.color === "green"
       ? { bg: "rgba(58, 212, 138, 0.12)", border: "rgba(58, 212, 138, 0.45)", text: "var(--green)" }
@@ -184,39 +189,39 @@ export default function PlayerPage() {
 
   return (
     <div className="quiz-shell quiz-stage-shell" style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: "18px" }}>
-      <div
-        style={{
-          width: "min(100%, 520px)",
-          display: "grid",
-          gap: "18px",
-        }}
-      >
+      <div className="player-stack">
         <div
+          className="glass-panel player-panel"
           style={{
-            background: "var(--card)",
-            border: "1px solid var(--border)",
-            borderRadius: "28px",
-            padding: "24px 22px",
             textAlign: "center",
-            boxShadow: "var(--shadow)",
           }}
         >
+          <div className="status-pill" style={{ margin: "0 auto 14px", width: "fit-content" }}>
+            <span className="status-dot" />
+            Player Device
+          </div>
           <div className="championship-eyebrow" style={{ marginBottom: "10px", letterSpacing: "0.24em" }}>Player Device</div>
           <div style={{ fontSize: "clamp(26px, 5vw, 40px)", fontWeight: 900 }}>{player.teamName}</div>
-          <div style={{ color: "var(--muted)", marginTop: "4px", fontSize: "16px" }}>{player.memberName}</div>
+          <div style={{ color: "var(--muted)", marginTop: "4px", fontSize: "16px" }}>Current mark: {currentScore} pts</div>
+          <div className="player-metrics">
+            <div className="player-metric-card">
+              <div className="value" style={{ color: "var(--amber)" }}>{currentScore}</div>
+              <div className="label">Points</div>
+            </div>
+            <div className="player-metric-card">
+              <div className="value" style={{ color: "var(--green)" }}>{currentWins}</div>
+              <div className="label">Wins</div>
+            </div>
+          </div>
         </div>
 
         <div
+          className="surface-card accent player-panel"
           style={{
-            background: "var(--card-strong)",
-            border: "1px solid rgba(255,255,255,0.08)",
-            borderRadius: "32px",
-            padding: "28px 22px 32px",
             textAlign: "center",
-            boxShadow: "var(--shadow)",
           }}
         >
-          <div className={`timer-mini ${timeLeft <= 8 && gameState.phase === "question" ? "alert" : ""}`} style={{ margin: "0 auto 18px" }}>
+          <div className={`timer-mini ${timeLeft <= 8 || isTimeUp ? "alert" : ""}`} style={{ margin: "0 auto 18px" }}>
             <div style={{ textAlign: "center" }}>
               <div className="value">{Math.ceil(timeLeft)}</div>
               <div className="label">Seconds</div>
@@ -224,11 +229,45 @@ export default function PlayerPage() {
           </div>
 
           <div style={{ color: "var(--amber)", letterSpacing: "0.22em", textTransform: "uppercase", fontSize: "13px", marginBottom: "8px" }}>
-            {gameState.phase}
+            {isTimeUp ? "verbal answer round" : gameState.phase}
           </div>
           <div style={{ color: "var(--muted)", fontSize: "15px", marginBottom: "22px", lineHeight: 1.5 }}>
             Watch the main screen for the question. Use this device only for buzzing.
           </div>
+
+          {isTimeUp && (
+            <div
+              style={{
+                marginBottom: "18px",
+                padding: "16px 18px",
+                borderRadius: "18px",
+                background: "rgba(255, 107, 107, 0.14)",
+                border: "1px solid rgba(255, 107, 107, 0.4)",
+                color: "#ffd1d1",
+              }}
+            >
+              <div className="timeup-icon" aria-hidden="true" style={{ marginBottom: "12px" }}>
+                <div className="alarm-clock player-alarm-clock">
+                  <div className="alarm-bell alarm-bell-left" />
+                  <div className="alarm-bell alarm-bell-right" />
+                  <div className="alarm-handle" />
+                  <div className="alarm-face">
+                    <div className="alarm-hand alarm-hand-hour" />
+                    <div className="alarm-hand alarm-hand-minute" />
+                    <div className="alarm-center-dot" />
+                  </div>
+                  <div className="alarm-leg alarm-leg-left" />
+                  <div className="alarm-leg alarm-leg-right" />
+                </div>
+              </div>
+              <div style={{ fontSize: "24px", fontWeight: 900, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                Time&apos;s Up
+              </div>
+              <div style={{ marginTop: "6px", fontSize: "14px", color: "var(--muted)" }}>
+                Wait for the host to reveal the answer.
+              </div>
+            </div>
+          )}
 
           <button
             onClick={handleBuzz}
@@ -242,15 +281,11 @@ export default function PlayerPage() {
 
         {notification && (
           <div
+            className="notice-card"
             style={{
               background: notificationTone.bg,
               border: `1px solid ${notificationTone.border}`,
               color: notificationTone.text,
-              borderRadius: "18px",
-              padding: "14px 18px",
-              textAlign: "center",
-              fontWeight: 700,
-              boxShadow: "var(--shadow)",
             }}
           >
             {notification.msg}

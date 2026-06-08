@@ -40,13 +40,19 @@ export default function FrontScreenLoginPage() {
         <div style={{ marginBottom: "18px" }}>
           <button
             onClick={() => navigateTo("/")}
-            style={{ background: "transparent", border: "none", color: "var(--muted)", letterSpacing: "0.08em" }}
+            className="auth-back-button"
           >
-            BACK
+            <span>{"<"}</span>
+            <span>Back</span>
           </button>
         </div>
 
         <div className="glass-panel auth-card">
+          <div className="auth-badge-row">
+            <div className="auth-chip">Projector View</div>
+            <div className="auth-chip">Round Dashboard</div>
+            <div className="auth-chip">Audience Ready</div>
+          </div>
           <div style={{ color: "var(--amber)", letterSpacing: "0.26em", textTransform: "uppercase", marginBottom: "12px" }}>
             Front Screen Login
           </div>
@@ -82,6 +88,10 @@ export default function FrontScreenLoginPage() {
               {loading ? "Opening..." : "Open Front Screen"}
             </button>
           </form>
+
+          <div className="auth-note">
+            This mode is designed for TVs and projectors, showing the live quiz board, timers, scoreboard breaks, and winner reveals.
+          </div>
         </div>
       </div>
     </div>

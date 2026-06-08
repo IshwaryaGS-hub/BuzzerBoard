@@ -40,13 +40,19 @@ export default function HostLoginPage() {
         <div style={{ marginBottom: "28px" }}>
           <button
             onClick={() => navigateTo("/")}
-            style={{ background: "transparent", border: "none", color: "var(--muted)", letterSpacing: "0.08em" }}
+            className="auth-back-button"
           >
-            BACK
+            <span>{"<"}</span>
+            <span>Back</span>
           </button>
         </div>
 
         <div className="glass-panel auth-card">
+          <div className="auth-badge-row">
+            <div className="auth-chip">Round Control</div>
+            <div className="auth-chip">Team Setup</div>
+            <div className="auth-chip">Live Scoring</div>
+          </div>
           <div style={{ color: "var(--amber)", letterSpacing: "0.26em", textTransform: "uppercase", marginBottom: "12px" }}>
             Host Login
           </div>
@@ -82,6 +88,10 @@ export default function HostLoginPage() {
               {loading ? "Entering..." : "Enter Host Mode"}
             </button>
           </form>
+
+          <div className="auth-note">
+            Host mode unlocks quiz setup, buzzer control, answer reveal, and the main scoreboard flow for the event.
+          </div>
         </div>
       </div>
     </div>

@@ -5,8 +5,8 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4001";
 
 export default function JoinPage() {
   const [teams, setTeams] = useState([]);
-  const [memberName, setMemberName] = useState("");
   const [selectedTeam, setSelectedTeam] = useState("");
+  const [teamPassword, setTeamPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingTeams, setLoadingTeams] = useState(true);
@@ -39,7 +39,7 @@ export default function JoinPage() {
   };
 
   const handleJoin = () => {
-    if (!memberName.trim() || !selectedTeam) {
+    if (!selectedTeam || !teamPassword.trim()) {
       setError("Please fill in all fields");
       return;
     }
@@ -55,10 +55,10 @@ export default function JoinPage() {
     socket.connect();
     socket.emit("join-player", {
       teamId: team.id,
-      memberName: memberName.trim(),
+      teamPassword: teamPassword.trim(),
     });
 
-    socket.once("joined-player", ({ success, teamId, teamName }) => {
+    socket.once("joined-player", ({ success, teamId, teamName, memberName, teamPassword: confirmedPassword }) => {
       if (!success) return;
 
       sessionStorage.setItem(
@@ -66,7 +66,8 @@ export default function JoinPage() {
         JSON.stringify({
           teamId,
           teamName,
-          memberName: memberName.trim(),
+          memberName,
+          teamPassword: confirmedPassword || teamPassword.trim(),
         })
       );
       navigateTo("/play");
@@ -84,19 +85,25 @@ export default function JoinPage() {
         <div style={{ marginBottom: "28px" }}>
           <button
             onClick={() => navigateTo("/")}
-            style={{ background: "transparent", border: "none", color: "var(--muted)", letterSpacing: "0.08em" }}
+            className="auth-back-button"
           >
-            BACK
+            <span>{"<"}</span>
+            <span>Back</span>
           </button>
         </div>
 
         <div className="glass-panel auth-card">
+          <div className="auth-badge-row">
+            <div className="auth-chip">8 Teams</div>
+            <div className="auth-chip">Secure Join</div>
+            <div className="auth-chip">Fast Buzzer</div>
+          </div>
           <div style={{ color: "var(--amber)", letterSpacing: "0.26em", textTransform: "uppercase", marginBottom: "12px" }}>
             Player Join
           </div>
           <h1 className="auth-title">Enter the game floor</h1>
           <p className="auth-copy">
-            Pick your team, add your name, and wait for the host to start the round.
+            Select the team and enter the password given for that team.
           </p>
 
           {error && (
@@ -111,12 +118,6 @@ export default function JoinPage() {
               handleJoin();
             }}
           >
-            <input
-              placeholder="Your Name"
-              value={memberName}
-              onChange={(event) => setMemberName(event.target.value)}
-              className="auth-input"
-            />
             <select
               value={selectedTeam}
               onChange={(event) => setSelectedTeam(event.target.value)}
@@ -130,6 +131,13 @@ export default function JoinPage() {
                 </option>
               ))}
             </select>
+            <input
+              type="password"
+              placeholder="Team Password"
+              value={teamPassword}
+              onChange={(event) => setTeamPassword(event.target.value)}
+              className="auth-input"
+            />
             <button
               type="submit"
               disabled={loading || loadingTeams}
@@ -138,6 +146,10 @@ export default function JoinPage() {
               {loading ? "Joining..." : "Join Quiz"}
             </button>
           </form>
+
+          <div className="auth-note">
+            Use the team password provided by the organizer. The quiz screen and answer reveal will stay on the main display.
+          </div>
         </div>
       </div>
     </div>

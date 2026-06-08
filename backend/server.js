@@ -6,17 +6,15 @@ const { Server } = require("socket.io");
 const cors = require("cors");
 const QUESTIONS = require("./data/questions");
 
-const DEFAULT_TEAMS = [
-  { id: "t1", name: "Team Alpha" },
-  { id: "t2", name: "Team Bravo" },
-  { id: "t3", name: "Team Charlie" },
-  { id: "t4", name: "Team Delta" },
-  { id: "t5", name: "Team Echo" },
-  { id: "t6", name: "Team Foxtrot" },
-  { id: "t7", name: "Team Golf" },
-  { id: "t8", name: "Team Hotel" },
-  { id: "t9", name: "Team India" },
-  { id: "t10", name: "Team Juliet" },
+const FIXED_TEAMS = [
+  { id: "t1", name: "APAR SHAKTI", password: "shakti2026" },
+  { id: "t2", name: "APAR ANUSHAKTI", password: "anushakti2026" },
+  { id: "t3", name: "APAT FIRE PROTEKT", password: "firepro2026" },
+  { id: "t4", name: "APAR GREEN WIRE", password: "greenwire2026" },
+  { id: "t5", name: "APAR ALUM ANUSHAKTI", password: "alumanu2026" },
+  { id: "t6", name: "APAR FLEXIBLE", password: "flexible2026" },
+  { id: "t7", name: "APAR E- BEAM", password: "ebeam2026" },
+  { id: "t8", name: "APAR RUBBER", password: "rubber2026" },
 ];
 
 const DATA_DIR = process.env.DATA_DIR
@@ -66,13 +64,16 @@ function createInitialGameState() {
     phase: "lobby",
     currentQuestionIndex: -1,
     currentQuestion: null,
+    answerRevealed: false,
     timerStartedAt: null,
-    timeLimit: 30,
+    timeLimit: 20,
     buzzerLocked: true,
     buzzedBy: null,
     scores: {},
     playerStats: {},
     buzzerHistory: [],
+    rejectedBuzzIds: [],
+    activeBuzzIndex: null,
     questionResults: [],
     nextBuzzId: 1,
   };
@@ -82,7 +83,7 @@ function createDefaultSettings() {
   return {
     hostPassword: process.env.HOST_PASSWORD || "apar2026",
     displayPassword: process.env.DISPLAY_PASSWORD || "screen2026",
-    teams: DEFAULT_TEAMS,
+    teams: FIXED_TEAMS,
   };
 }
 
@@ -93,29 +94,30 @@ function ensureDataDir() {
 }
 
 function sanitizeTeams(teams) {
-  if (!Array.isArray(teams)) return DEFAULT_TEAMS;
+  const providedById = new Map(
+    Array.isArray(teams)
+      ? teams
+          .map((team) => ({
+            id: `${team?.id || ""}`.trim().toLowerCase(),
+            password: `${team?.password || ""}`.trim(),
+          }))
+          .filter((team) => team.id)
+      : []
+  );
 
-  const seen = new Set();
-  const sanitized = teams
-    .map((team, index) => {
-      const name = `${team?.name || ""}`.trim();
-      if (!name) return null;
+  return FIXED_TEAMS.map((team, index) => {
+    const provided =
+      providedById.get(team.id) ||
+      (Array.isArray(teams) && teams[index]
+        ? { password: `${teams[index]?.password || ""}`.trim() }
+        : null);
 
-      const requestedId = `${team?.id || ""}`.trim();
-      const fallbackId = `team_${index + 1}`;
-      let id = (requestedId || fallbackId).replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase();
-      if (!id) id = fallbackId;
-
-      while (seen.has(id)) {
-        id = `${id}_${index + 1}`;
-      }
-
-      seen.add(id);
-      return { id, name };
-    })
-    .filter(Boolean);
-
-  return sanitized.length > 0 ? sanitized : DEFAULT_TEAMS;
+    return {
+      id: team.id,
+      name: team.name,
+      password: provided?.password || team.password,
+    };
+  });
 }
 
 function loadSettings() {
@@ -156,7 +158,7 @@ function saveSettings(nextSettings) {
 
 function getPublicConfig() {
   return {
-    teams: settings.teams,
+    teams: settings.teams.map(({ id, name }) => ({ id, name })),
     hostPasswordConfigured: Boolean(settings.hostPassword),
     displayPasswordConfigured: Boolean(settings.displayPassword),
   };
@@ -180,6 +182,15 @@ function getCurrentDisplayPassword() {
 
 function getTeamById(teamId) {
   return settings.teams.find((team) => team.id === teamId) || null;
+}
+
+function getActivePlayerForTeam(teamId, exceptSocketId = null) {
+  return (
+    Object.entries(connectedUsers).find(([socketId, user]) => {
+      if (socketId === exceptSocketId) return false;
+      return user?.role === "player" && user.teamId === teamId;
+    }) || null
+  );
 }
 
 function ensureTeamScore(teamId, teamName) {
@@ -283,29 +294,71 @@ function getCurrentQuestionResult() {
   );
 }
 
+function getCurrentActiveBuzz() {
+  if (
+    typeof gameState.activeBuzzIndex !== "number" ||
+    gameState.activeBuzzIndex < 0 ||
+    gameState.activeBuzzIndex >= gameState.buzzerHistory.length
+  ) {
+    return null;
+  }
+
+  return gameState.buzzerHistory[gameState.activeBuzzIndex] || null;
+}
+
+function getQuestionPoints(question) {
+  if (!question) return 10;
+  return Number.isFinite(question.points) ? question.points : 10;
+}
+
+function isScoredQuestion(question) {
+  return getQuestionPoints(question) > 0;
+}
+
+function getQuestionPenalty(question) {
+  return isScoredQuestion(question) ? 10 : 0;
+}
+
+function buildQuestionResult(question, overrides = {}) {
+  return {
+    questionId: question?.id ?? null,
+    question: question?.text ?? null,
+    category: question?.category ?? null,
+    roundName: question?.roundName ?? null,
+    isSample: Boolean(question?.isSample),
+    dashboardAfter: Boolean(question?.dashboardAfter),
+    dashboardTitle: question?.dashboardTitle || null,
+    dashboardSubtitle: question?.dashboardSubtitle || null,
+    awardedPoints: getQuestionPoints(question),
+    ...overrides,
+  };
+}
+
 function broadcastState() {
   io.to("host").emit("game-state", {
     ...gameState,
+    activeBuzz: getCurrentActiveBuzz(),
     totalQuestions: QUESTIONS.length,
   });
   io.to("host").emit("quiz-config", getAdminConfig());
 
   io.to("spectators").emit("game-state", {
     ...gameState,
+    activeBuzz: getCurrentActiveBuzz(),
     totalQuestions: QUESTIONS.length,
   });
 
   io.to("players").emit("game-state", {
     phase: gameState.phase,
     currentQuestion:
-      gameState.phase !== "answer"
+      !gameState.answerRevealed
         ? gameState.currentQuestion
           ? {
               id: gameState.currentQuestion.id,
               text: gameState.currentQuestion.text,
               options: gameState.currentQuestion.options,
               category: gameState.currentQuestion.category,
-              timeLimit: gameState.currentQuestion.timeLimit,
+              timeLimit: gameState.timeLimit,
             }
           : null
         : gameState.currentQuestion,
@@ -314,6 +367,9 @@ function broadcastState() {
     buzzerLocked: gameState.buzzerLocked,
     buzzedBy: gameState.buzzedBy,
     buzzerHistory: gameState.buzzerHistory,
+    rejectedBuzzIds: gameState.rejectedBuzzIds,
+    activeBuzzIndex: gameState.activeBuzzIndex,
+    activeBuzz: getCurrentActiveBuzz(),
     scores: gameState.scores,
     playerStats: gameState.playerStats,
     questionResults: gameState.questionResults,
@@ -333,7 +389,7 @@ function startTimer() {
     clearInterval(timerInterval);
     if (gameState.phase === "question" || gameState.phase === "buzzed") {
       gameState.buzzerLocked = true;
-      gameState.phase = gameState.buzzerHistory.length > 0 ? "buzzed" : "answer";
+      gameState.phase = "timeup";
       broadcastState();
       io.emit("times-up");
     }
@@ -351,7 +407,17 @@ function requireHostPassword(req, res, next) {
 }
 
 app.get("/api/questions-count", (req, res) => {
-  res.json({ count: QUESTIONS.length });
+  const sampleCount = QUESTIONS.filter((question) => question.isSample).length;
+  const scoredCount = QUESTIONS.length - sampleCount;
+  const rounds = [...new Set(QUESTIONS.filter((question) => !question.isSample).map((question) => question.roundName || question.category))];
+
+  res.json({
+    count: QUESTIONS.length,
+    totalCount: QUESTIONS.length,
+    sampleCount,
+    scoredCount,
+    roundCount: rounds.length,
+  });
 });
 
 app.get("/api/config", (req, res) => {
@@ -398,12 +464,23 @@ io.on("connection", (socket) => {
     broadcastState();
   });
 
-  socket.on("join-player", ({ teamId, memberName }) => {
+  socket.on("join-player", ({ teamId, teamPassword }) => {
     const team = getTeamById(teamId);
-    const normalizedName = `${memberName || ""}`.trim();
+    const normalizedPassword = `${teamPassword || ""}`.trim();
+    const playerLabel = team?.name || "";
 
-    if (!team || !normalizedName) {
-      socket.emit("error", { message: "Select a valid team and enter your name" });
+    if (!team || !normalizedPassword) {
+      socket.emit("error", { message: "Select a valid team and enter the team password" });
+      return;
+    }
+
+    if (normalizedPassword !== team.password) {
+      socket.emit("error", { message: "Invalid team password" });
+      return;
+    }
+
+    if (getActivePlayerForTeam(team.id, socket.id)) {
+      socket.emit("error", { message: "This team login is already in use. Only one player can join per team." });
       return;
     }
 
@@ -420,25 +497,26 @@ io.on("connection", (socket) => {
     connectedUsers[socket.id] = {
       teamId: team.id,
       teamName: team.name,
-      memberName: normalizedName,
+      memberName: playerLabel,
       role: "player",
     };
 
     ensureTeamScore(team.id, team.name);
-    ensurePlayerStats(team.id, team.name, normalizedName);
+    ensurePlayerStats(team.id, team.name, playerLabel);
     const scoreRow = gameState.scores[team.id];
-    if (!scoreRow.members.find((member) => member.name === normalizedName)) {
-      scoreRow.members.push({ name: normalizedName, socketId: socket.id });
+    if (!scoreRow.members.find((member) => member.name === playerLabel)) {
+      scoreRow.members.push({ name: playerLabel, socketId: socket.id });
     }
 
     socket.emit("joined-player", {
       success: true,
       teamId: team.id,
       teamName: team.name,
-      memberName: normalizedName,
+      memberName: playerLabel,
+      teamPassword: team.password,
     });
     broadcastState();
-    console.log(`${normalizedName} (${team.name}) joined`);
+    console.log(`${playerLabel} joined`);
   });
 
   socket.on("join-spectator", ({ password } = {}) => {
@@ -473,9 +551,12 @@ io.on("connection", (socket) => {
     gameState.phase = "question";
     gameState.buzzerLocked = true;
     gameState.buzzedBy = null;
+    gameState.answerRevealed = false;
     gameState.timerStartedAt = null;
-    gameState.timeLimit = question.timeLimit;
+    gameState.timeLimit = question.timeLimit || 20;
     gameState.buzzerHistory = [];
+    gameState.rejectedBuzzIds = [];
+    gameState.activeBuzzIndex = null;
     gameState.nextBuzzId = 1;
     broadcastState();
   });
@@ -498,15 +579,16 @@ io.on("connection", (socket) => {
   socket.on("host-reveal-answer", () => {
     if (connectedUsers[socket.id]?.role !== "host") return;
     clearInterval(timerInterval);
-    gameState.phase = "answer";
-    gameState.buzzerLocked = true;
+    gameState.answerRevealed = true;
     broadcastState();
   });
 
   socket.on("host-mark-correct", ({ teamId, buzzerId }) => {
     if (connectedUsers[socket.id]?.role !== "host") return;
     if (!gameState.currentQuestion) return;
+    if (!gameState.buzzerHistory.length) return;
 
+    const activeBuzz = getCurrentActiveBuzz();
     const winningBuzz =
       gameState.buzzerHistory.find((entry) => entry.id === buzzerId) ||
       gameState.buzzerHistory.find((entry) => entry.teamId === teamId);
@@ -519,30 +601,42 @@ io.on("connection", (socket) => {
       return;
     }
 
+    if (!activeBuzz || winningBuzz.id !== activeBuzz.id) {
+      socket.emit("error", { message: "Only the current active buzzer can be marked right." });
+      return;
+    }
+
     if (existingResult) {
       socket.emit("error", { message: "This round has already been marked." });
       return;
     }
 
     clearInterval(timerInterval);
-    teamScore.score += 10;
-    teamScore.correctAnswers = (teamScore.correctAnswers || 0) + 1;
+    const awardedPoints = getQuestionPoints(gameState.currentQuestion);
     const playerStat = ensurePlayerStats(
       winningBuzz.teamId,
       winningBuzz.teamName,
       winningBuzz.memberName
     );
-    playerStat.wins += 1;
-    playerStat.awardedPoints += 10;
+
+    if (isScoredQuestion(gameState.currentQuestion)) {
+      teamScore.score += awardedPoints;
+      teamScore.correctAnswers = (teamScore.correctAnswers || 0) + 1;
+      playerStat.wins += 1;
+      playerStat.awardedPoints += awardedPoints;
+    }
 
     gameState.phase = "answer";
     gameState.buzzerLocked = true;
+    gameState.activeBuzzIndex = null;
     gameState.questionResults.push({
-      question: gameState.currentQuestion?.text,
-      winner: teamScore.teamName,
-      winnerPlayer: winningBuzz?.memberName || null,
-      winningTimeMs: winningBuzz?.timeMs || null,
-      correct: true,
+      ...buildQuestionResult(gameState.currentQuestion, {
+        winner: teamScore.teamName,
+        winnerPlayer: winningBuzz?.memberName || null,
+        winningTimeMs: winningBuzz?.timeMs || null,
+        correct: true,
+        awardedPoints,
+      }),
     });
 
     broadcastState();
@@ -554,28 +648,70 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("host-mark-wrong", ({ teamId }) => {
+  socket.on("host-mark-wrong", ({ teamId, buzzerId }) => {
     if (connectedUsers[socket.id]?.role !== "host") return;
     if (!gameState.currentQuestion) return;
+    if (!gameState.buzzerHistory.length) return;
 
+    const activeBuzz = getCurrentActiveBuzz();
+    const targetBuzz =
+      gameState.buzzerHistory.find((entry) => entry.id === buzzerId) ||
+      gameState.buzzerHistory.find((entry) => entry.teamId === teamId);
     const existingResult = getCurrentQuestionResult();
+
+    if (!activeBuzz || !targetBuzz || targetBuzz.id !== activeBuzz.id) {
+      socket.emit("error", { message: "Only the current active buzzer can be marked wrong." });
+      return;
+    }
+
     if (existingResult) {
       socket.emit("error", { message: "This round has already been marked." });
       return;
     }
 
     clearInterval(timerInterval);
+    const penaltyPoints = getQuestionPenalty(gameState.currentQuestion);
+    const penalizedTeam = targetBuzz?.teamId ? gameState.scores[targetBuzz.teamId] : null;
+    const penalizedPlayer =
+      targetBuzz?.teamId && targetBuzz?.teamName && targetBuzz?.memberName
+        ? ensurePlayerStats(targetBuzz.teamId, targetBuzz.teamName, targetBuzz.memberName)
+        : null;
+
+    if (penaltyPoints > 0 && penalizedTeam) {
+      penalizedTeam.score -= penaltyPoints;
+      if (penalizedPlayer) {
+        penalizedPlayer.awardedPoints -= penaltyPoints;
+      }
+    }
+
+    if (!gameState.rejectedBuzzIds.includes(targetBuzz.id)) {
+      gameState.rejectedBuzzIds.push(targetBuzz.id);
+    }
+
+    const nextIndex = gameState.buzzerHistory.findIndex((entry) => !gameState.rejectedBuzzIds.includes(entry.id));
+
+    if (nextIndex >= 0) {
+      gameState.buzzerLocked = true;
+      gameState.activeBuzzIndex = nextIndex;
+      broadcastState();
+      io.emit("answer-wrong", { teamId: targetBuzz.teamId, buzzerId: targetBuzz.id, hasNext: true });
+      return;
+    }
+
     gameState.buzzerLocked = true;
     gameState.phase = "answer";
-    gameState.questionResults.push({
-      question: gameState.currentQuestion?.text,
-      winner: null,
-      winnerPlayer: null,
-      winningTimeMs: null,
-      correct: false,
-    });
+    gameState.activeBuzzIndex = null;
+    gameState.questionResults.push(
+      buildQuestionResult(gameState.currentQuestion, {
+        winner: null,
+        winnerPlayer: null,
+        winningTimeMs: null,
+        correct: false,
+        awardedPoints: -penaltyPoints,
+      })
+    );
     broadcastState();
-    io.emit("answer-wrong", { teamId });
+    io.emit("answer-wrong", { teamId: targetBuzz.teamId, buzzerId: targetBuzz.id, hasNext: false });
   });
 
   socket.on("host-reset-game", () => {
@@ -624,6 +760,9 @@ io.on("connection", (socket) => {
     });
     gameState.buzzerHistory.sort((left, right) => left.timeMs - right.timeMs);
     gameState.buzzedBy = gameState.buzzerHistory[0] || null;
+    if (gameState.activeBuzzIndex === null) {
+      gameState.activeBuzzIndex = 0;
+    }
 
     if (gameState.buzzerHistory.length >= 3) {
       gameState.buzzerLocked = true;

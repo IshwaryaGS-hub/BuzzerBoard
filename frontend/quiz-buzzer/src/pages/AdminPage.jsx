@@ -3,23 +3,6 @@ import { socket } from "../socket";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4001";
 
-function createTeamId(name, index) {
-  const slug = name
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-
-  return slug || `team_${index + 1}`;
-}
-
-function createDraftTeam(index) {
-  return {
-    id: `draft_${Date.now()}_${index}`,
-    name: "",
-  };
-}
-
 function formatCount(count, singular, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
@@ -109,7 +92,7 @@ export default function AdminPage() {
   }, [hostAuth]);
 
   useEffect(() => {
-    if (state?.phase !== "question" && state?.phase !== "buzzed") return undefined;
+    if (state?.phase !== "question" && state?.phase !== "buzzed" && state?.phase !== "timeup") return undefined;
 
     const intervalId = window.setInterval(() => {
       setNow(Date.now());
@@ -137,34 +120,21 @@ export default function AdminPage() {
       })
     : [];
 
-  const updateTeamName = (index, name) => {
+  const updateTeamPassword = (index, password) => {
     setConfig((current) => ({
       ...current,
       teams: current.teams.map((team, teamIndex) =>
-        teamIndex === index ? { ...team, name } : team
+        teamIndex === index ? { ...team, password } : team
       ),
-    }));
-  };
-
-  const addTeam = () => {
-    setConfig((current) => ({
-      ...current,
-      teams: [...current.teams, createDraftTeam(current.teams.length)],
-    }));
-  };
-
-  const removeTeam = (index) => {
-    setConfig((current) => ({
-      ...current,
-      teams: current.teams.filter((_, teamIndex) => teamIndex !== index),
     }));
   };
 
   const saveConfig = async () => {
     const normalizedTeams = config.teams
-      .map((team, index) => ({
-        id: team.id?.startsWith("draft_") ? createTeamId(team.name, index) : team.id,
+      .map((team) => ({
+        id: team.id,
         name: team.name.trim(),
+        password: `${team.password || ""}`.trim(),
       }))
       .filter((team) => team.name);
 
@@ -180,6 +150,11 @@ export default function AdminPage() {
 
     if (!config.displayPassword.trim()) {
       setConfigError("Front screen password cannot be empty");
+      return;
+    }
+
+    if (normalizedTeams.some((team) => !team.password)) {
+      setConfigError("Every team must have a password");
       return;
     }
 
@@ -254,43 +229,37 @@ export default function AdminPage() {
           .reverse()
           .find((result) => result.question === question.text) || null
       : null;
-  const canMarkWinner = Boolean(state.buzzedBy) && !currentQuestionResult;
+  const canMarkWinner = (state.buzzerHistory?.length || 0) > 0 && !currentQuestionResult;
+  const activeBuzz = state.activeBuzz || null;
+  const rejectedBuzzIds = state.rejectedBuzzIds || [];
   const buzzCount = state.buzzerHistory?.length || 0;
+  const isAnswerRevealed = Boolean(state.answerRevealed);
+  const activeBuzzId =
+    activeBuzz?.id ||
+    (typeof state.activeBuzzIndex === "number" && state.activeBuzzIndex >= 0
+      ? state.buzzerHistory?.[state.activeBuzzIndex]?.id
+      : null);
 
   return (
-    <div style={{ minHeight: "100vh", padding: "24px", maxWidth: "1120px", margin: "0 auto" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "28px", gap: "16px", flexWrap: "wrap" }}>
+    <div className="quiz-shell quiz-stage-shell host-shell">
+      <div className="host-frame">
+      <div className="glass-panel host-topbar">
         <div>
           <div style={{ fontSize: "12px", letterSpacing: "4px", color: "var(--amber)" }}>HOST PANEL</div>
-          <h1 style={{ fontSize: "32px", fontWeight: "700" }}>Quiz Control</h1>
+          <h1 className="host-topbar-title">Quiz Control</h1>
         </div>
-        <div style={{ display: "flex", gap: "12px" }}>
+        <div className="host-topbar-actions">
           <a
             href="/leaderboard"
             target="_blank"
             rel="noreferrer"
-            style={{
-              padding: "10px 20px",
-              borderRadius: "10px",
-              border: "1.5px solid var(--amber)",
-              color: "var(--amber)",
-              fontSize: "13px",
-              fontWeight: "600",
-              background: "rgba(232,160,32,0.08)",
-            }}
+            className="host-action-link"
           >
             Front Screen
           </a>
           <button
             onClick={() => emit("host-reset-game")}
-            style={{
-              padding: "10px 20px",
-              borderRadius: "10px",
-              border: "1.5px solid var(--border)",
-              color: "var(--muted)",
-              fontSize: "13px",
-              background: "transparent",
-            }}
+            className="host-action-button"
           >
             Reset
           </button>
@@ -313,7 +282,7 @@ export default function AdminPage() {
         <div className="quiz-overview-card">
           <div className="eyebrow">Top Player</div>
             <div className="title">
-              {overallPlayerLeader ? `${overallPlayerLeader.memberName} · ${overallPlayerLeader.teamName}` : "Waiting for buzzes"}
+              {overallPlayerLeader ? `${overallPlayerLeader.memberName} - ${overallPlayerLeader.teamName}` : "Waiting for buzzes"}
             </div>
             <div className="meta">
               {overallPlayerLeader
@@ -324,6 +293,7 @@ export default function AdminPage() {
         </div>
 
       <div
+        className="admin-setup-panel"
         style={{
           background: "var(--card)",
           border: "1px solid var(--border)",
@@ -379,14 +349,31 @@ export default function AdminPage() {
           />
         </div>
 
+        <div style={{ color: "var(--muted)", fontSize: "13px", marginBottom: "14px" }}>
+          Fixed quiz setup for 8 teams. You can change only the passwords you want to give each team.
+        </div>
+
         <div style={{ display: "grid", gap: "10px", marginBottom: "16px" }}>
           {config.teams.map((team, index) => (
-            <div key={`${team.id}-${index}`} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "10px" }}>
+            <div key={`${team.id}-${index}`} className="admin-team-row" style={{ display: "grid", gridTemplateColumns: "minmax(220px, 1fr) 1fr", gap: "10px" }}>
               <input
                 type="text"
                 value={team.name}
-                placeholder={`Team ${index + 1}`}
-                onChange={(event) => updateTeamName(index, event.target.value)}
+                readOnly
+                style={{
+                  width: "100%",
+                  padding: "12px 14px",
+                  borderRadius: "12px",
+                  border: "1px solid var(--border)",
+                  background: "rgba(255,255,255,0.02)",
+                  color: "var(--white)",
+                }}
+              />
+              <input
+                type="text"
+                value={team.password || ""}
+                placeholder={`Password for ${team.name}`}
+                onChange={(event) => updateTeamPassword(index, event.target.value)}
                 style={{
                   width: "100%",
                   padding: "12px 14px",
@@ -396,37 +383,11 @@ export default function AdminPage() {
                   color: "var(--white)",
                 }}
               />
-              <button
-                onClick={() => removeTeam(index)}
-                type="button"
-                style={{
-                  padding: "12px 14px",
-                  borderRadius: "12px",
-                  border: "1px solid rgba(255,107,107,0.35)",
-                  background: "rgba(255,107,107,0.08)",
-                  color: "var(--red)",
-                }}
-              >
-                Remove
-              </button>
             </div>
           ))}
         </div>
 
         <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-          <button
-            onClick={addTeam}
-            type="button"
-            style={{
-              padding: "12px 16px",
-              borderRadius: "12px",
-              border: "1px solid var(--border)",
-              background: "rgba(255,255,255,0.04)",
-              color: "var(--white)",
-            }}
-          >
-            Add Team
-          </button>
           <button
             onClick={saveConfig}
             type="button"
@@ -446,6 +407,7 @@ export default function AdminPage() {
       </div>
 
       <div
+        className="admin-statusbar"
         style={{
           background: "var(--card)",
           border: "1px solid var(--border)",
@@ -460,7 +422,7 @@ export default function AdminPage() {
       >
         <div><span style={{ color: "var(--muted)", fontSize: "12px" }}>Phase </span><strong style={{ color: "var(--amber)", textTransform: "uppercase" }}>{state.phase}</strong></div>
         <div><span style={{ color: "var(--muted)", fontSize: "12px" }}>Question </span><strong>{state.currentQuestionIndex + 1} / {state.totalQuestions || "-"}</strong></div>
-        <div><span style={{ color: "var(--muted)", fontSize: "12px" }}>Teams online </span><strong style={{ color: "var(--green)" }}>{connectedTeamsCount}</strong></div>
+        <div><span style={{ color: "var(--muted)", fontSize: "12px" }}>Teams online </span><strong style={{ color: "var(--green)" }}>{connectedTeamsCount} / 8</strong></div>
         <div><span style={{ color: "var(--muted)", fontSize: "12px" }}>Buzzers </span><strong style={{ color: state.buzzerLocked ? "var(--red)" : "var(--green)" }}>{state.buzzerLocked ? "LOCKED" : "OPEN"}</strong></div>
         <div style={{ marginLeft: "auto" }}>
           <div className="quiz-hud-side">
@@ -478,8 +440,8 @@ export default function AdminPage() {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "28px" }}>
-        <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "16px", padding: "24px" }}>
+      <div className="admin-main-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "28px" }}>
+        <div className="admin-panel" style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "16px", padding: "24px" }}>
           <div style={{ fontSize: "12px", letterSpacing: "3px", color: "var(--amber)", marginBottom: "14px" }}>QUESTION</div>
           {question ? (
             <>
@@ -488,15 +450,17 @@ export default function AdminPage() {
                   marginBottom: "16px",
                   padding: "12px 14px",
                   borderRadius: "12px",
-                  background: "rgba(16,201,122,0.12)",
-                  border: "1px solid rgba(16,201,122,0.38)",
+                  background: isAnswerRevealed ? "rgba(16,201,122,0.12)" : "rgba(255,255,255,0.04)",
+                  border: isAnswerRevealed ? "1px solid rgba(16,201,122,0.38)" : "1px solid var(--border)",
                 }}
               >
-                <div style={{ color: "var(--green)", fontSize: "11px", fontWeight: "800", letterSpacing: "0.22em", textTransform: "uppercase", marginBottom: "6px" }}>
-                  Host Key
+                <div style={{ color: isAnswerRevealed ? "var(--green)" : "var(--amber)", fontSize: "11px", fontWeight: "800", letterSpacing: "0.22em", textTransform: "uppercase", marginBottom: "6px" }}>
+                  {isAnswerRevealed ? "Host Key" : "Answer Status"}
                 </div>
                 <div style={{ color: "var(--white)", fontSize: "15px", fontWeight: "700", lineHeight: 1.5 }}>
-                  Correct answer: {["A", "B", "C", "D"][question.correct]}. {question.options?.[question.correct]}
+                  {isAnswerRevealed
+                    ? `Correct answer: ${["A", "B", "C", "D"][question.correct]}. ${question.options?.[question.correct]}`
+                    : "Answer hidden until host reveals it"}
                 </div>
               </div>
               <p style={{ fontSize: "16px", fontWeight: "600", marginBottom: "16px", lineHeight: "1.5" }}>{question.text}</p>
@@ -513,21 +477,21 @@ export default function AdminPage() {
                       padding: "10px 12px",
                       borderRadius: "8px",
                       marginBottom: "6px",
-                      background: isCorrect
+                      background: isAnswerRevealed && isCorrect
                           ? "rgba(16,201,122,0.1)"
                           : "rgba(255,255,255,0.03)",
                       border: "1px solid",
-                      borderColor: isCorrect
+                      borderColor: isAnswerRevealed && isCorrect
                           ? "var(--green)"
                           : "var(--border)",
                       fontSize: "14px",
                     }}
                   >
-                    <span style={{ color: isCorrect ? "var(--green)" : "var(--muted)", fontWeight: "700" }}>
+                    <span style={{ color: isAnswerRevealed && isCorrect ? "var(--green)" : "var(--muted)", fontWeight: "700" }}>
                       {["A", "B", "C", "D"][index]}
                     </span>
                     <span>{option}</span>
-                    {isCorrect && (
+                    {isAnswerRevealed && isCorrect && (
                       <span style={{ marginLeft: "auto", color: "var(--green)", fontSize: "12px", fontWeight: "700" }}>
                         HOST ANSWER
                       </span>
@@ -542,6 +506,7 @@ export default function AdminPage() {
         </div>
 
         <div
+          className="admin-panel"
           style={{
             background: "var(--card)",
             border: "1px solid var(--border)",
@@ -584,71 +549,94 @@ export default function AdminPage() {
 
       {state.buzzedBy && (
         <div
+          className="admin-buzz-panel"
           style={{
             background: "rgba(16,201,122,0.08)",
             border: "2px solid var(--green)",
             borderRadius: "16px",
             padding: "20px 28px",
             marginBottom: "24px",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: "20px",
-            flexWrap: "wrap",
           }}
         >
-          <div>
-            <div style={{ fontSize: "12px", letterSpacing: "3px", color: "var(--green)", marginBottom: "4px" }}>BUZZED IN</div>
-            <div style={{ fontSize: "22px", fontWeight: "700" }}>{state.buzzedBy.memberName}</div>
-            <div style={{ color: "var(--muted)", fontSize: "14px" }}>
-              {state.buzzedBy.teamName} | reacted in {(state.buzzedBy.timeMs / 1000).toFixed(2)}s
-            </div>
-            {canMarkWinner ? (
-              <div style={{ color: "var(--white)", fontSize: "15px", marginTop: "10px" }}>
-                Ask verbal answers to the top 3 in buzzer order, then mark the winner below.
-              </div>
-            ) : (
-              <div style={{ color: "var(--amber)", fontSize: "15px", marginTop: "10px" }}>
-                Winner already marked for this question.
-                {currentQuestionResult?.winner
-                  ? ` ${currentQuestionResult.winnerPlayer || "A player"} from ${currentQuestionResult.winner} received the points.`
-                  : " No team received points for this round."}
-              </div>
-            )}
+          <div style={{ fontSize: "12px", letterSpacing: "3px", color: "var(--green)", marginBottom: "8px" }}>BUZZED IN</div>
+          <div style={{ color: "var(--white)", fontSize: "15px", marginBottom: "16px" }}>
+            {canMarkWinner
+              ? "Ask teams in buzzer order. Only the current active team can be marked right or wrong."
+              : currentQuestionResult?.winner
+                ? `${currentQuestionResult.winnerPlayer || "A player"} from ${currentQuestionResult.winner} received the points.`
+                : "No team received points for this round."}
           </div>
-          <div style={{ display: "grid", gap: "10px", minWidth: "320px" }}>
-            {canMarkWinner ? (
-              <>
-                {state.buzzerHistory.slice(0, 3).map((entry, index) => (
-                  <button
-                    key={entry.id || `${entry.teamId}-${entry.memberName}-${index}`}
-                    onClick={() => emit("host-mark-correct", { teamId: entry.teamId, buzzerId: entry.id })}
-                    style={{ padding: "12px 18px", borderRadius: "10px", border: "none", background: "var(--green)", color: "#fff", fontWeight: "700", fontSize: "14px", textAlign: "left", cursor: "pointer" }}
-                  >
-                    MARK CORRECT #{index + 1}: {entry.memberName} | {entry.teamName} | {(entry.timeMs / 1000).toFixed(2)}s
-                  </button>
-                ))}
-                <button
-                  onClick={() => emit("host-mark-wrong", { teamId: state.buzzedBy.teamId })}
-                  style={{ padding: "12px 24px", borderRadius: "10px", border: "none", background: "var(--red)", color: "#fff", fontWeight: "700", fontSize: "14px", cursor: "pointer" }}
+
+          <div style={{ display: "grid", gap: "10px" }}>
+            {state.buzzerHistory.map((entry, index) => {
+              const isActive = canMarkWinner && activeBuzzId === entry.id;
+              const isRejected = rejectedBuzzIds.includes(entry.id);
+              const controlsDisabled = !canMarkWinner || !isActive || isRejected;
+
+              return (
+                <div
+                  key={entry.id || `${entry.teamId}-${entry.memberName}-${index}`}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(0, 1fr) auto",
+                    gap: "16px",
+                    alignItems: "center",
+                    padding: "14px 16px",
+                    borderRadius: "12px",
+                    border: `1px solid ${isActive ? "rgba(58,212,138,0.35)" : "var(--border)"}`,
+                    background: isRejected
+                      ? "rgba(255,107,107,0.08)"
+                      : isActive
+                        ? "rgba(58,212,138,0.08)"
+                        : "rgba(255,255,255,0.04)",
+                  }}
                 >
-                  NO CORRECT VERBAL ANSWER
-                </button>
-              </>
-            ) : (
-              <div
-                style={{
-                  padding: "14px 16px",
-                  borderRadius: "10px",
-                  border: "1px solid var(--border)",
-                  background: "rgba(255,255,255,0.04)",
-                  color: "var(--muted)",
-                  fontSize: "14px",
-                }}
-              >
-                Move to the next question when you're ready.
-              </div>
-            )}
+                  <div>
+                    <div style={{ fontWeight: "800", fontSize: "15px" }}>
+                      #{index + 1} {entry.teamName}
+                    </div>
+                    <div style={{ color: "var(--muted)", fontSize: "13px", marginTop: "4px" }}>
+                      {(entry.timeMs / 1000).toFixed(2)}s
+                      {isRejected ? " | Marked wrong" : isActive ? " | Active now" : ""}
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", minWidth: "300px" }}>
+                    <button
+                      onClick={() => emit("host-mark-correct", { teamId: entry.teamId, buzzerId: entry.id })}
+                      disabled={controlsDisabled}
+                      style={{
+                        padding: "12px 14px",
+                        borderRadius: "10px",
+                        border: "none",
+                        background: controlsDisabled ? "rgba(255,255,255,0.08)" : "var(--green)",
+                        color: controlsDisabled ? "var(--muted)" : "#fff",
+                        fontWeight: "700",
+                        fontSize: "14px",
+                        cursor: controlsDisabled ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      RIGHT ANSWER
+                    </button>
+                    <button
+                      onClick={() => emit("host-mark-wrong", { teamId: entry.teamId, buzzerId: entry.id })}
+                      disabled={controlsDisabled}
+                      style={{
+                        padding: "12px 14px",
+                        borderRadius: "10px",
+                        border: "none",
+                        background: controlsDisabled ? "rgba(255,255,255,0.08)" : "var(--red)",
+                        color: controlsDisabled ? "var(--muted)" : "#fff",
+                        fontWeight: "700",
+                        fontSize: "14px",
+                        cursor: controlsDisabled ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      WRONG ANSWER
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -667,7 +655,12 @@ export default function AdminPage() {
                 fontSize: "14px",
               }}
             >
-              <span><strong style={{ color: "var(--amber)" }}>#{index + 1}</strong> {entry.memberName} <span style={{ color: "var(--muted)" }}>{entry.teamName}</span></span>
+              <span>
+                <strong style={{ color: "var(--amber)" }}>#{index + 1}</strong> {entry.teamName}
+                <span style={{ color: "var(--muted)" }}>
+                  {rejectedBuzzIds.includes(entry.id) ? " | Wrong answer" : activeBuzz?.id === entry.id ? " | Active" : ""}
+                </span>
+              </span>
               <span style={{ color: "var(--amber)", fontWeight: "600" }}>{(entry.timeMs / 1000).toFixed(2)}s</span>
             </div>
           ))}
@@ -690,6 +683,7 @@ export default function AdminPage() {
             <span style={{ fontSize: "22px", fontWeight: "700", color: index === 0 ? "var(--amber)" : "var(--white)" }}>{team.score}</span>
           </div>
         ))}
+      </div>
       </div>
     </div>
   );
