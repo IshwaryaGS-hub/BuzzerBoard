@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { socket } from "../socket";
+import PlayInstructions from "../components/PlayInstructions";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4001";
 
@@ -92,63 +93,71 @@ export default function JoinPage() {
           </button>
         </div>
 
-        <div className="glass-panel auth-card">
-          <div className="auth-badge-row">
-            <div className="auth-chip">8 Teams</div>
-            <div className="auth-chip">Secure Join</div>
-            <div className="auth-chip">Fast Buzzer</div>
-          </div>
-          <div style={{ color: "var(--amber)", letterSpacing: "0.26em", textTransform: "uppercase", marginBottom: "12px" }}>
-            Player Join
-          </div>
-          <h1 className="auth-title">Enter the game floor</h1>
-          <p className="auth-copy">
-            Select the team and enter the password given for that team.
-          </p>
+        <div className="join-layout">
+          <PlayInstructions
+            compact
+            title="Read This Before Joining"
+            subtitle="Teams can review the buzzer flow first, then use the join panel to enter the quiz."
+          />
 
-          {error && (
-            <div className="auth-error">
-              {error}
+          <div className="glass-panel auth-card">
+            <div className="auth-badge-row">
+              <div className="auth-chip">8 Teams</div>
+              <div className="auth-chip">Secure Join</div>
+              <div className="auth-chip">Fast Buzzer</div>
             </div>
-          )}
+            <div style={{ color: "var(--amber)", letterSpacing: "0.26em", textTransform: "uppercase", marginBottom: "12px" }}>
+              Player Join
+            </div>
+            <h1 className="auth-title">Enter the game floor</h1>
+            <p className="auth-copy">
+              Select the team and enter the password given for that team.
+            </p>
 
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              handleJoin();
-            }}
-          >
-            <select
-              value={selectedTeam}
-              onChange={(event) => setSelectedTeam(event.target.value)}
-              disabled={loadingTeams}
-              className="auth-input auth-select"
-            >
-              <option value="">{loadingTeams ? "Loading teams..." : "Select your team..."}</option>
-              {teams.map((team) => (
-                <option key={team.id} value={team.id}>
-                  {team.name}
-                </option>
-              ))}
-            </select>
-            <input
-              type="password"
-              placeholder="Team Password"
-              value={teamPassword}
-              onChange={(event) => setTeamPassword(event.target.value)}
-              className="auth-input"
-            />
-            <button
-              type="submit"
-              disabled={loading || loadingTeams}
-              className="auth-submit"
-            >
-              {loading ? "Joining..." : "Join Quiz"}
-            </button>
-          </form>
+            {error && (
+              <div className="auth-error">
+                {error}
+              </div>
+            )}
 
-          <div className="auth-note">
-            Use the team password provided by the organizer. The quiz screen and answer reveal will stay on the main display.
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                handleJoin();
+              }}
+            >
+              <select
+                value={selectedTeam}
+                onChange={(event) => setSelectedTeam(event.target.value)}
+                disabled={loadingTeams}
+                className="auth-input auth-select"
+              >
+                <option value="">{loadingTeams ? "Loading teams..." : "Select your team..."}</option>
+                {teams.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.name}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="password"
+                placeholder="Team Password"
+                value={teamPassword}
+                onChange={(event) => setTeamPassword(event.target.value)}
+                className="auth-input"
+              />
+              <button
+                type="submit"
+                disabled={loading || loadingTeams}
+                className="auth-submit"
+              >
+                {loading ? "Joining..." : "Join Quiz"}
+              </button>
+            </form>
+
+            <div className="auth-note">
+              Use the team password provided by the organizer. The quiz screen and answer reveal will stay on the main display.
+            </div>
           </div>
         </div>
       </div>

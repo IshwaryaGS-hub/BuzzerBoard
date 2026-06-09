@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { socket } from "../socket";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4001";
@@ -13,7 +13,11 @@ export default function AdminPage() {
   const [configStatus, setConfigStatus] = useState("");
   const [configError, setConfigError] = useState("");
   const [savingConfig, setSavingConfig] = useState(false);
+  const [setupCollapsed, setSetupCollapsed] = useState(true);
   const [now, setNow] = useState(Date.now());
+  const [buzzDelta, setBuzzDelta] = useState(0);
+  const [buzzAnimTick, setBuzzAnimTick] = useState(0);
+  const previousBuzzCountRef = useRef(0);
   const hostAuth = sessionStorage.getItem("hostAuth") || "";
 
   const navigateTo = (path) => {
@@ -210,12 +214,8 @@ export default function AdminPage() {
     return Math.max(0, (state.timeLimit || 0) - elapsed);
   }, [now, state?.timerStartedAt, state?.timeLimit]);
 
-  if (!state) {
-    return <div style={{ padding: "40px", color: "var(--muted)" }}>Connecting...</div>;
-  }
-
-  const question = state.currentQuestion;
-  const connectedTeamsCount = Object.values(state.scores || {}).filter(
+  const question = state?.currentQuestion || null;
+  const connectedTeamsCount = Object.values(state?.scores || {}).filter(
     (team) => (team.members?.length || 0) > 0
   ).length;
   const overallTeamLeader =
@@ -238,16 +238,36 @@ export default function AdminPage() {
           .reverse()
           .find((result) => result.question === question.text) || null
       : null;
-  const canMarkWinner = (state.buzzerHistory?.length || 0) > 0 && !currentQuestionResult;
-  const activeBuzz = state.activeBuzz || null;
-  const rejectedBuzzIds = state.rejectedBuzzIds || [];
-  const buzzCount = state.buzzerHistory?.length || 0;
-  const isAnswerRevealed = Boolean(state.answerRevealed);
+  const canMarkWinner = (state?.buzzerHistory?.length || 0) > 0 && !currentQuestionResult;
+  const activeBuzz = state?.activeBuzz || null;
+  const rejectedBuzzIds = state?.rejectedBuzzIds || [];
+  const buzzCount = state?.buzzerHistory?.length || 0;
+  const isAnswerRevealed = Boolean(state?.answerRevealed);
   const activeBuzzId =
     activeBuzz?.id ||
-    (typeof state.activeBuzzIndex === "number" && state.activeBuzzIndex >= 0
-      ? state.buzzerHistory?.[state.activeBuzzIndex]?.id
+    (typeof state?.activeBuzzIndex === "number" && state.activeBuzzIndex >= 0
+      ? state?.buzzerHistory?.[state.activeBuzzIndex]?.id
       : null);
+
+  useEffect(() => {
+    const previous = previousBuzzCountRef.current;
+    if (buzzCount > previous) {
+      setBuzzDelta(buzzCount - previous);
+      setBuzzAnimTick((current) => current + 1);
+      const timeoutId = window.setTimeout(() => {
+        setBuzzDelta(0);
+      }, 1200);
+      previousBuzzCountRef.current = buzzCount;
+      return () => window.clearTimeout(timeoutId);
+    }
+
+    previousBuzzCountRef.current = buzzCount;
+    return undefined;
+  }, [buzzCount]);
+
+  if (!state) {
+    return <div style={{ padding: "40px", color: "var(--muted)" }}>Connecting...</div>;
+  }
 
   return (
     <div className="quiz-shell quiz-stage-shell host-shell">
@@ -302,121 +322,6 @@ export default function AdminPage() {
         </div>
 
       <div
-        className="admin-setup-panel"
-        style={{
-          background: "var(--card)",
-          border: "1px solid var(--border)",
-          borderRadius: "18px",
-          padding: "24px",
-          marginBottom: "24px",
-        }}
-      >
-        <div style={{ fontSize: "12px", letterSpacing: "3px", color: "var(--amber)", marginBottom: "16px" }}>SETUP</div>
-
-        {configError && (
-          <div style={{ color: "var(--red)", marginBottom: "14px", fontSize: "14px" }}>{configError}</div>
-        )}
-        {configStatus && (
-          <div style={{ color: "var(--green)", marginBottom: "14px", fontSize: "14px" }}>{configStatus}</div>
-        )}
-
-        <div style={{ marginBottom: "18px" }}>
-          <label style={{ display: "block", color: "var(--muted)", fontSize: "12px", marginBottom: "8px" }}>
-            Host Password
-          </label>
-          <input
-            type="text"
-            value={config.hostPassword}
-            onChange={(event) => setConfig((current) => ({ ...current, hostPassword: event.target.value }))}
-            style={{
-              width: "100%",
-              padding: "12px 14px",
-              borderRadius: "12px",
-              border: "1px solid var(--border)",
-              background: "rgba(255,255,255,0.04)",
-              color: "var(--white)",
-            }}
-          />
-        </div>
-
-        <div style={{ marginBottom: "18px" }}>
-          <label style={{ display: "block", color: "var(--muted)", fontSize: "12px", marginBottom: "8px" }}>
-            Front Screen Password
-          </label>
-          <input
-            type="text"
-            value={config.displayPassword}
-            onChange={(event) => setConfig((current) => ({ ...current, displayPassword: event.target.value }))}
-            style={{
-              width: "100%",
-              padding: "12px 14px",
-              borderRadius: "12px",
-              border: "1px solid var(--border)",
-              background: "rgba(255,255,255,0.04)",
-              color: "var(--white)",
-            }}
-          />
-        </div>
-
-        <div style={{ color: "var(--muted)", fontSize: "13px", marginBottom: "14px" }}>
-          Configure up to 8 teams here. You can rename teams and change the password for each one before starting a new game.
-        </div>
-
-        <div style={{ display: "grid", gap: "10px", marginBottom: "16px" }}>
-          {config.teams.map((team, index) => (
-            <div key={`${team.id}-${index}`} className="admin-team-row" style={{ display: "grid", gridTemplateColumns: "minmax(220px, 1fr) 1fr", gap: "10px" }}>
-              <input
-                type="text"
-                value={team.name}
-                placeholder={`Team ${index + 1} name`}
-                onChange={(event) => updateTeamName(index, event.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "12px 14px",
-                  borderRadius: "12px",
-                  border: "1px solid var(--border)",
-                  background: "rgba(255,255,255,0.04)",
-                  color: "var(--white)",
-                }}
-              />
-              <input
-                type="text"
-                value={team.password || ""}
-                placeholder={`Password for ${team.name}`}
-                onChange={(event) => updateTeamPassword(index, event.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "12px 14px",
-                  borderRadius: "12px",
-                  border: "1px solid var(--border)",
-                  background: "rgba(255,255,255,0.04)",
-                  color: "var(--white)",
-                }}
-              />
-            </div>
-          ))}
-        </div>
-
-        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-          <button
-            onClick={saveConfig}
-            type="button"
-            disabled={savingConfig}
-            style={{
-              padding: "12px 18px",
-              borderRadius: "12px",
-              border: "none",
-              background: "linear-gradient(135deg,var(--amber),var(--amber2))",
-              color: "#111",
-              fontWeight: "700",
-            }}
-          >
-            {savingConfig ? "Saving..." : "Save Setup"}
-          </button>
-        </div>
-      </div>
-
-      <div
         className="admin-statusbar"
         style={{
           background: "var(--card)",
@@ -436,263 +341,303 @@ export default function AdminPage() {
         <div><span style={{ color: "var(--muted)", fontSize: "12px" }}>Buzzers </span><strong style={{ color: state.buzzerLocked ? "var(--red)" : "var(--green)" }}>{state.buzzerLocked ? "LOCKED" : "OPEN"}</strong></div>
         <div style={{ marginLeft: "auto" }}>
           <div className="quiz-hud-side">
-            <div className={`quiz-stat-circle ${timeLeft <= 8 ? "alert" : ""}`}>
+            <div className={`quiz-hud-orb timer ${timeLeft <= 8 ? "alert" : ""}`}>
               <div style={{ textAlign: "center" }}>
                 <div className="value">{Math.ceil(timeLeft)}</div>
                 <div className="label">Seconds Left</div>
               </div>
             </div>
-            <div className="quiz-count-card">
+            <div className={`quiz-hud-orb buzz ${buzzDelta ? "pulse" : ""}`} key={buzzAnimTick}>
               <div className="value">{buzzCount}</div>
               <div className="label">Buzzed</div>
+              {buzzDelta > 0 && <div className="quiz-hud-orb-pop">+{buzzDelta}</div>}
             </div>
           </div>
         </div>
       </div>
 
-      <div className="admin-main-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "28px" }}>
-        <div className="admin-panel" style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "16px", padding: "24px" }}>
-          <div style={{ fontSize: "12px", letterSpacing: "3px", color: "var(--amber)", marginBottom: "14px" }}>QUESTION</div>
-          {question ? (
-            <>
-              <div
-                style={{
-                  marginBottom: "16px",
-                  padding: "12px 14px",
-                  borderRadius: "12px",
-                  background: isAnswerRevealed ? "rgba(16,201,122,0.12)" : "rgba(255,255,255,0.04)",
-                  border: isAnswerRevealed ? "1px solid rgba(16,201,122,0.38)" : "1px solid var(--border)",
-                }}
-              >
-                <div style={{ color: isAnswerRevealed ? "var(--green)" : "var(--amber)", fontSize: "11px", fontWeight: "800", letterSpacing: "0.22em", textTransform: "uppercase", marginBottom: "6px" }}>
-                  {isAnswerRevealed ? "Host Key" : "Answer Status"}
-                </div>
-                <div style={{ color: "var(--white)", fontSize: "15px", fontWeight: "700", lineHeight: 1.5 }}>
-                  {isAnswerRevealed
-                    ? `Correct answer: ${["A", "B", "C", "D"][question.correct]}. ${question.options?.[question.correct]}`
-                    : "Answer hidden until host reveals it"}
+      <div className="admin-workspace">
+        <div className="admin-left-rail">
+          <section className="admin-setup-panel admin-surface-card">
+            <button
+              type="button"
+              className="admin-section-toggle"
+              onClick={() => setSetupCollapsed((current) => !current)}
+              aria-expanded={!setupCollapsed}
+            >
+              <div>
+                <div className="admin-section-eyebrow">Setup</div>
+                <div className="admin-section-title">Game Setup</div>
+                <div className="admin-section-meta">
+                  Host password, front screen access, and team setup.
                 </div>
               </div>
-              <p style={{ fontSize: "16px", fontWeight: "600", marginBottom: "16px", lineHeight: "1.5" }}>{question.text}</p>
-              {question.options?.map((option, index) => {
-                const isCorrect = index === question.correct;
+              <span className={`admin-toggle-icon ${setupCollapsed ? "collapsed" : ""}`}>⌃</span>
+            </button>
 
-                return (
+            {!setupCollapsed && (
+              <div className="admin-section-body">
+                {configError && (
+                  <div className="admin-message error">{configError}</div>
+                )}
+                {configStatus && (
+                  <div className="admin-message success">{configStatus}</div>
+                )}
+
+                <div className="admin-form-field">
+                  <label className="admin-field-label">Host Password</label>
+                  <input
+                    type="text"
+                    value={config.hostPassword}
+                    onChange={(event) => setConfig((current) => ({ ...current, hostPassword: event.target.value }))}
+                    className="admin-text-input"
+                  />
+                </div>
+
+                <div className="admin-form-field">
+                  <label className="admin-field-label">Front Screen Password</label>
+                  <input
+                    type="text"
+                    value={config.displayPassword}
+                    onChange={(event) => setConfig((current) => ({ ...current, displayPassword: event.target.value }))}
+                    className="admin-text-input"
+                  />
+                </div>
+
+                <div className="admin-helper-copy">
+                  Configure up to 8 teams here. Rename teams and update each password before starting a new game.
+                </div>
+
+                <div className="admin-team-grid">
+                  {config.teams.map((team, index) => (
+                    <div key={`${team.id}-${index}`} className="admin-team-row">
+                      <input
+                        type="text"
+                        value={team.name}
+                        placeholder={`Team ${index + 1} name`}
+                        onChange={(event) => updateTeamName(index, event.target.value)}
+                        className="admin-text-input"
+                      />
+                      <input
+                        type="text"
+                        value={team.password || ""}
+                        placeholder={`Password for ${team.name || `Team ${index + 1}`}`}
+                        onChange={(event) => updateTeamPassword(index, event.target.value)}
+                        className="admin-text-input"
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="admin-setup-actions">
+                  <button
+                    onClick={saveConfig}
+                    type="button"
+                    disabled={savingConfig}
+                    className="admin-primary-button"
+                  >
+                    {savingConfig ? "Saving..." : "Save Setup"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="admin-panel admin-surface-card">
+            <div className="admin-section-eyebrow">Question Handling</div>
+            <div className="admin-question-card">
+              {question ? (
+                <>
                   <div
-                    key={index}
                     style={{
-                      display: "flex",
-                      gap: "10px",
-                      alignItems: "center",
-                      padding: "10px 12px",
-                      borderRadius: "8px",
-                      marginBottom: "6px",
-                      background: isAnswerRevealed && isCorrect
-                          ? "rgba(16,201,122,0.1)"
-                          : "rgba(255,255,255,0.03)",
-                      border: "1px solid",
-                      borderColor: isAnswerRevealed && isCorrect
-                          ? "var(--green)"
-                          : "var(--border)",
-                      fontSize: "14px",
+                      marginBottom: "16px",
+                      padding: "12px 14px",
+                      borderRadius: "12px",
+                      background: isAnswerRevealed ? "rgba(16,201,122,0.12)" : "rgba(255,255,255,0.04)",
+                      border: isAnswerRevealed ? "1px solid rgba(16,201,122,0.38)" : "1px solid var(--border)",
                     }}
                   >
-                    <span style={{ color: isAnswerRevealed && isCorrect ? "var(--green)" : "var(--muted)", fontWeight: "700" }}>
-                      {["A", "B", "C", "D"][index]}
-                    </span>
-                    <span>{option}</span>
-                    {isAnswerRevealed && isCorrect && (
-                      <span style={{ marginLeft: "auto", color: "var(--green)", fontSize: "12px", fontWeight: "700" }}>
-                        HOST ANSWER
+                    <div style={{ color: isAnswerRevealed ? "var(--green)" : "var(--amber)", fontSize: "11px", fontWeight: "800", letterSpacing: "0.22em", textTransform: "uppercase", marginBottom: "6px" }}>
+                      {isAnswerRevealed ? "Host Key" : "Answer Status"}
+                    </div>
+                    <div style={{ color: "var(--white)", fontSize: "15px", fontWeight: "700", lineHeight: 1.5 }}>
+                      {isAnswerRevealed
+                        ? `Correct answer: ${["A", "B", "C", "D"][question.correct]}. ${question.options?.[question.correct]}`
+                        : "Answer hidden until host reveals it"}
+                    </div>
+                  </div>
+                  <p style={{ fontSize: "16px", fontWeight: "600", marginBottom: "16px", lineHeight: "1.5" }}>{question.text}</p>
+                  <div className="admin-question-options">
+                    {question.options?.map((option, index) => {
+                      const isCorrect = index === question.correct;
+
+                      return (
+                        <div
+                          key={index}
+                          className="admin-question-option"
+                          style={{
+                            background: isAnswerRevealed && isCorrect
+                              ? "rgba(16,201,122,0.1)"
+                              : "rgba(255,255,255,0.03)",
+                            borderColor: isAnswerRevealed && isCorrect
+                              ? "var(--green)"
+                              : "var(--border)",
+                          }}
+                        >
+                          <span style={{ color: isAnswerRevealed && isCorrect ? "var(--green)" : "var(--muted)", fontWeight: "700" }}>
+                            {["A", "B", "C", "D"][index]}
+                          </span>
+                          <span>{option}</span>
+                          {isAnswerRevealed && isCorrect && (
+                            <span style={{ marginLeft: "auto", color: "var(--green)", fontSize: "12px", fontWeight: "700" }}>
+                              HOST ANSWER
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <p style={{ color: "var(--muted)" }}>No question loaded yet</p>
+              )}
+            </div>
+
+            <div className="admin-controls-grid">
+              <button
+                onClick={() => emit("host-next-question")}
+                className="admin-primary-button"
+              >
+                Next Question
+              </button>
+              <button
+                onClick={() => emit("host-unlock-buzzers")}
+                disabled={!state.buzzerLocked}
+                className="admin-secondary-button success"
+              >
+                Unlock Buzzers
+              </button>
+              <button
+                onClick={() => emit("host-lock-buzzers")}
+                disabled={state.buzzerLocked}
+                className="admin-secondary-button danger"
+              >
+                Lock Buzzers
+              </button>
+              <button
+                onClick={() => emit("host-reveal-answer")}
+                className="admin-secondary-button neutral"
+              >
+                Reveal Answer
+              </button>
+            </div>
+
+            {state.buzzerHistory?.length > 0 && (
+              <div className="admin-subsection">
+                <div className="admin-section-eyebrow">Buzz Order This Question</div>
+                {state.buzzerHistory.map((entry, index) => (
+                  <div key={entry.id || index} className="admin-buzz-order-row">
+                    <span>
+                      <strong style={{ color: "var(--amber)" }}>#{index + 1}</strong> {entry.teamName}
+                      <span style={{ color: "var(--muted)" }}>
+                        {rejectedBuzzIds.includes(entry.id) ? " | Wrong answer" : activeBuzz?.id === entry.id ? " | Active" : ""}
                       </span>
-                    )}
+                    </span>
+                    <span style={{ color: "var(--amber)", fontWeight: "600" }}>{(entry.timeMs / 1000).toFixed(2)}s</span>
                   </div>
-                );
-              })}
-            </>
-          ) : (
-            <p style={{ color: "var(--muted)" }}>No question loaded yet</p>
-          )}
+                ))}
+              </div>
+            )}
+          </section>
         </div>
 
-        <div
-          className="admin-panel"
-          style={{
-            background: "var(--card)",
-            border: "1px solid var(--border)",
-            borderRadius: "16px",
-            padding: "24px",
-            display: "flex",
-            flexDirection: "column",
-            gap: "12px",
-          }}
-        >
-          <div style={{ fontSize: "12px", letterSpacing: "3px", color: "var(--amber)", marginBottom: "6px" }}>CONTROLS</div>
-          <button
-            onClick={() => emit("host-next-question")}
-            style={{ padding: "14px", borderRadius: "12px", border: "none", background: "linear-gradient(135deg,var(--amber),var(--amber2))", color: "#111", fontWeight: "700", fontSize: "14px", letterSpacing: "2px" }}
-          >
-            NEXT QUESTION
-          </button>
-          <button
-            onClick={() => emit("host-unlock-buzzers")}
-            disabled={!state.buzzerLocked}
-            style={{ padding: "14px", borderRadius: "12px", border: "1.5px solid var(--green)", background: state.buzzerLocked ? "rgba(16,201,122,0.1)" : "rgba(255,255,255,0.03)", color: state.buzzerLocked ? "var(--green)" : "var(--muted)", fontWeight: "700", fontSize: "14px", letterSpacing: "2px" }}
-          >
-            UNLOCK BUZZERS
-          </button>
-          <button
-            onClick={() => emit("host-lock-buzzers")}
-            disabled={state.buzzerLocked}
-            style={{ padding: "14px", borderRadius: "12px", border: "1.5px solid var(--red)", background: !state.buzzerLocked ? "rgba(232,69,69,0.1)" : "rgba(255,255,255,0.03)", color: !state.buzzerLocked ? "var(--red)" : "var(--muted)", fontWeight: "700", fontSize: "14px", letterSpacing: "2px" }}
-          >
-            LOCK BUZZERS
-          </button>
-          <button
-            onClick={() => emit("host-reveal-answer")}
-            style={{ padding: "14px", borderRadius: "12px", border: "1.5px solid var(--border)", background: "rgba(255,255,255,0.04)", color: "var(--white)", fontWeight: "600", fontSize: "14px" }}
-          >
-            REVEAL ANSWER
-          </button>
-        </div>
-      </div>
-
-      {state.buzzedBy && (
-        <div
-          className="admin-buzz-panel"
-          style={{
-            background: "rgba(16,201,122,0.08)",
-            border: "2px solid var(--green)",
-            borderRadius: "16px",
-            padding: "20px 28px",
-            marginBottom: "24px",
-          }}
-        >
-          <div style={{ fontSize: "12px", letterSpacing: "3px", color: "var(--green)", marginBottom: "8px" }}>BUZZED IN</div>
-          <div style={{ color: "var(--white)", fontSize: "15px", marginBottom: "16px" }}>
-            {canMarkWinner
-              ? "Ask teams in buzzer order. Only the current active team can be marked right or wrong."
-              : currentQuestionResult?.winner
-                ? `${currentQuestionResult.winnerPlayer || "A player"} from ${currentQuestionResult.winner} received the points.`
-                : "No team received points for this round."}
-          </div>
-
-          <div style={{ display: "grid", gap: "10px" }}>
-            {state.buzzerHistory.map((entry, index) => {
-              const isActive = canMarkWinner && activeBuzzId === entry.id;
-              const isRejected = rejectedBuzzIds.includes(entry.id);
-              const controlsDisabled = !canMarkWinner || !isActive || isRejected;
-
-              return (
-                <div
-                  key={entry.id || `${entry.teamId}-${entry.memberName}-${index}`}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "minmax(0, 1fr) auto",
-                    gap: "16px",
-                    alignItems: "center",
-                    padding: "14px 16px",
-                    borderRadius: "12px",
-                    border: `1px solid ${isActive ? "rgba(58,212,138,0.35)" : "var(--border)"}`,
-                    background: isRejected
-                      ? "rgba(255,107,107,0.08)"
-                      : isActive
-                        ? "rgba(58,212,138,0.08)"
-                        : "rgba(255,255,255,0.04)",
-                  }}
-                >
-                  <div>
-                    <div style={{ fontWeight: "800", fontSize: "15px" }}>
-                      #{index + 1} {entry.teamName}
-                    </div>
-                    <div style={{ color: "var(--muted)", fontSize: "13px", marginTop: "4px" }}>
-                      {(entry.timeMs / 1000).toFixed(2)}s
-                      {isRejected ? " | Marked wrong" : isActive ? " | Active now" : ""}
+        <div className="admin-right-rail">
+          <section className="admin-panel admin-surface-card">
+            <div className="admin-section-eyebrow">Live Scores</div>
+            <div className="admin-scoreboard-list">
+              {sortedTeams.map(([teamId, team], index) => (
+                <div key={teamId} className={`admin-score-row ${index === 0 ? "leader" : ""}`}>
+                  <span className="admin-score-rank">{index + 1}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: "700", fontSize: "15px" }}>{team.teamName}</div>
+                    <div style={{ fontSize: "12px", color: "var(--muted)" }}>
+                      {formatCount(team.members?.length ?? 0, "member")} | {team.correctAnswers ?? 0} correct
                     </div>
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", minWidth: "300px" }}>
-                    <button
-                      onClick={() => emit("host-mark-correct", { teamId: entry.teamId, buzzerId: entry.id })}
-                      disabled={controlsDisabled}
-                      style={{
-                        padding: "12px 14px",
-                        borderRadius: "10px",
-                        border: "none",
-                        background: controlsDisabled ? "rgba(255,255,255,0.08)" : "var(--green)",
-                        color: controlsDisabled ? "var(--muted)" : "#fff",
-                        fontWeight: "700",
-                        fontSize: "14px",
-                        cursor: controlsDisabled ? "not-allowed" : "pointer",
-                      }}
-                    >
-                      RIGHT ANSWER
-                    </button>
-                    <button
-                      onClick={() => emit("host-mark-wrong", { teamId: entry.teamId, buzzerId: entry.id })}
-                      disabled={controlsDisabled}
-                      style={{
-                        padding: "12px 14px",
-                        borderRadius: "10px",
-                        border: "none",
-                        background: controlsDisabled ? "rgba(255,255,255,0.08)" : "var(--red)",
-                        color: controlsDisabled ? "var(--muted)" : "#fff",
-                        fontWeight: "700",
-                        fontSize: "14px",
-                        cursor: controlsDisabled ? "not-allowed" : "pointer",
-                      }}
-                    >
-                      WRONG ANSWER
-                    </button>
-                  </div>
+                  <span className="admin-score-value">{team.score}</span>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+              ))}
+            </div>
+          </section>
 
-      {state.buzzerHistory?.length > 0 && (
-        <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "14px", padding: "20px", marginBottom: "24px" }}>
-          <div style={{ fontSize: "12px", letterSpacing: "3px", color: "var(--amber)", marginBottom: "12px" }}>BUZZ ORDER THIS QUESTION</div>
-          {state.buzzerHistory.map((entry, index) => (
-            <div
-              key={entry.id || index}
+          {state.buzzerHistory?.length > 0 && (
+            <section
+              className="admin-buzz-panel admin-surface-card"
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                padding: "8px 0",
-                borderBottom: `1px solid ${index < state.buzzerHistory.length - 1 ? "var(--border)" : "transparent"}`,
-                fontSize: "14px",
+                background: "rgba(16,201,122,0.08)",
+                border: "2px solid var(--green)",
               }}
             >
-              <span>
-                <strong style={{ color: "var(--amber)" }}>#{index + 1}</strong> {entry.teamName}
-                <span style={{ color: "var(--muted)" }}>
-                  {rejectedBuzzIds.includes(entry.id) ? " | Wrong answer" : activeBuzz?.id === entry.id ? " | Active" : ""}
-                </span>
-              </span>
-              <span style={{ color: "var(--amber)", fontWeight: "600" }}>{(entry.timeMs / 1000).toFixed(2)}s</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "16px", padding: "24px" }}>
-        <div style={{ fontSize: "12px", letterSpacing: "3px", color: "var(--amber)", marginBottom: "16px" }}>LIVE SCORES</div>
-        {sortedTeams.map(([teamId, team], index) => (
-          <div key={teamId} style={{ display: "flex", alignItems: "center", gap: "16px", padding: "12px 16px", borderRadius: "10px", marginBottom: "8px", background: index === 0 ? "rgba(232,160,32,0.08)" : "rgba(255,255,255,0.02)" }}>
-            <span style={{ width: "28px", height: "28px", borderRadius: "50%", background: index === 0 ? "var(--amber)" : "var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "700", fontSize: "13px", color: index === 0 ? "#111" : "var(--muted)", flexShrink: 0 }}>
-              {index + 1}
-            </span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: "600", fontSize: "14px" }}>{team.teamName}</div>
-              <div style={{ fontSize: "11px", color: "var(--muted)" }}>
-                {formatCount(team.members?.length ?? 0, "member")} | {team.correctAnswers ?? 0} correct
+              <div className="admin-section-eyebrow" style={{ color: "var(--green)" }}>Live Answer Queue</div>
+              <div style={{ color: "var(--white)", fontSize: "15px", marginBottom: "16px" }}>
+                {canMarkWinner
+                  ? "Ask teams in buzzer order. Only the active team can be marked right or wrong."
+                  : currentQuestionResult?.winner
+                    ? `${currentQuestionResult.winnerPlayer || "A player"} from ${currentQuestionResult.winner} received the points.`
+                    : "No team received points for this round."}
               </div>
-            </div>
-            <span style={{ fontSize: "22px", fontWeight: "700", color: index === 0 ? "var(--amber)" : "var(--white)" }}>{team.score}</span>
-          </div>
-        ))}
+
+              <div style={{ display: "grid", gap: "10px" }}>
+                {state.buzzerHistory.map((entry, index) => {
+                  const isActive = canMarkWinner && activeBuzzId === entry.id;
+                  const isRejected = rejectedBuzzIds.includes(entry.id);
+                  const controlsDisabled = !canMarkWinner || !isActive || isRejected;
+
+                  return (
+                    <div
+                      key={entry.id || `${entry.teamId}-${entry.memberName}-${index}`}
+                      className="admin-answer-row"
+                      style={{
+                        border: `1px solid ${isActive ? "rgba(58,212,138,0.35)" : "var(--border)"}`,
+                        background: isRejected
+                          ? "rgba(255,107,107,0.08)"
+                          : isActive
+                            ? "rgba(58,212,138,0.08)"
+                            : "rgba(255,255,255,0.04)",
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: "800", fontSize: "15px" }}>
+                          #{index + 1} {entry.teamName}
+                        </div>
+                        <div style={{ color: "var(--muted)", fontSize: "13px", marginTop: "4px" }}>
+                          {(entry.timeMs / 1000).toFixed(2)}s
+                          {isRejected ? " | Marked wrong" : isActive ? " | Active now" : ""}
+                        </div>
+                      </div>
+                      <div className="admin-answer-actions">
+                        <button
+                          onClick={() => emit("host-mark-correct", { teamId: entry.teamId, buzzerId: entry.id })}
+                          disabled={controlsDisabled}
+                          className="admin-judgement-button success"
+                        >
+                          Right Answer
+                        </button>
+                        <button
+                          onClick={() => emit("host-mark-wrong", { teamId: entry.teamId, buzzerId: entry.id })}
+                          disabled={controlsDisabled}
+                          className="admin-judgement-button danger"
+                        >
+                          Wrong Answer
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+        </div>
       </div>
       </div>
     </div>

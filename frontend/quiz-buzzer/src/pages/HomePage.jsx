@@ -67,7 +67,7 @@ export default function HomePage() {
               </div>
 
               <p className="championship-subline home-hero-copy">
-                A polished live buzzer experience for APAR Cable Solutions, built for projector screens, host control, and fast team gameplay.
+                A polished live buzzer experience for APAR Cable Solutions.
               </p>
 
               <div className="championship-stats home-stats">

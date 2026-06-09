@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { socket } from "../socket";
 import { playTimesUpAlarm } from "../utils/alarm";
+import PlayInstructions from "../components/PlayInstructions";
 
 export default function LeaderboardPage() {
   const [state, setState] = useState(null);
   const [now, setNow] = useState(Date.now());
   const [showTimeUpOrder, setShowTimeUpOrder] = useState(false);
+  const [buzzDelta, setBuzzDelta] = useState(0);
+  const [buzzAnimTick, setBuzzAnimTick] = useState(0);
   const timesUpTriggeredRef = useRef(false);
+  const previousBuzzCountRef = useRef(0);
   const frontScreenAuth = sessionStorage.getItem("frontScreenAuth") || "";
 
   const navigateTo = (path) => {
@@ -107,6 +111,22 @@ export default function LeaderboardPage() {
     if (index === 2) return "bronze";
     return "default";
   };
+
+  useEffect(() => {
+    const previous = previousBuzzCountRef.current;
+    if (buzzCount > previous) {
+      setBuzzDelta(buzzCount - previous);
+      setBuzzAnimTick((current) => current + 1);
+      const timeoutId = window.setTimeout(() => {
+        setBuzzDelta(0);
+      }, 1200);
+      previousBuzzCountRef.current = buzzCount;
+      return () => window.clearTimeout(timeoutId);
+    }
+
+    previousBuzzCountRef.current = buzzCount;
+    return undefined;
+  }, [buzzCount]);
 
   useEffect(() => {
     if (showTimeUp && !timesUpTriggeredRef.current) {
@@ -232,7 +252,10 @@ export default function LeaderboardPage() {
   );
 
   return (
-    <div className="quiz-shell quiz-stage-shell frontboard-shell" style={{ minHeight: "100vh", padding: "28px 22px 40px" }}>
+    <div
+      className={`quiz-shell quiz-stage-shell frontboard-shell ${state?.phase === "lobby" ? "frontboard-lobby-shell" : ""}`}
+      style={{ minHeight: "100vh", padding: "clamp(10px, 1.6vw, 22px) clamp(10px, 1.4vw, 20px) clamp(14px, 2vh, 28px)" }}
+    >
       <div className="frontboard-frame" style={{ maxWidth: "1540px", margin: "0 auto" }}>
         <div
           className="frontboard-header"
@@ -255,15 +278,16 @@ export default function LeaderboardPage() {
           </div>
 
           <div className="quiz-hud-side" style={{ justifySelf: "end" }}>
-            <div className={`timer-mini ${timeLeft <= 8 && (state?.phase === "question" || state?.phase === "buzzed" || state?.phase === "timeup") ? "alert" : ""}`}>
+            <div className={`quiz-hud-orb timer ${timeLeft <= 8 && (state?.phase === "question" || state?.phase === "buzzed" || state?.phase === "timeup") ? "alert" : ""}`}>
               <div style={{ textAlign: "center" }}>
                 <div className="value">{Math.ceil(timeLeft || 0)}</div>
                 <div className="label">Seconds</div>
               </div>
             </div>
-            <div className="quiz-count-card">
+            <div className={`quiz-hud-orb buzz ${buzzDelta ? "pulse" : ""}`} key={buzzAnimTick}>
               <div className="value">{buzzCount}</div>
               <div className="label">Buzzed</div>
+              {buzzDelta > 0 && <div className="quiz-hud-orb-pop">+{buzzDelta}</div>}
             </div>
           </div>
         </div>
@@ -289,15 +313,25 @@ export default function LeaderboardPage() {
         </div>
 
         {state?.phase === "lobby" && (
-          <section className="championship-hero" style={{ minHeight: "70vh" }}>
-            <div className="championship-eyebrow">Ready Room</div>
-            <div className="championship-stack">
-              <div className="championship-kicker">Front Screen</div>
-              <div className="championship-headline">Quiz Will Be Started Soon</div>
+          <section className="championship-hero frontboard-lobby-hero">
+            <div style={{ width: "min(100%, 1220px)" }}>
+              <PlayInstructions
+                compact
+                title="Playing Instructions"
+                subtitle="Teams can follow these steps first while waiting for the host to start the round."
+              />
             </div>
-            <p className="championship-subline">
-              Teams are joining and the host will begin with the sample round shortly.
-            </p>
+
+            <div className="frontboard-lobby-message">
+              <div className="championship-eyebrow">Ready Room</div>
+              <div className="championship-stack frontboard-lobby-stack">
+                <div className="championship-kicker">Front Screen</div>
+                <div className="championship-headline">Quiz Will Be Started Soon</div>
+              </div>
+              <p className="championship-subline frontboard-lobby-subline">
+                Teams are joining and the host will begin with the sample round shortly.
+              </p>
+            </div>
           </section>
         )}
 
