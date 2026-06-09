@@ -14,6 +14,7 @@ export default function AdminPage() {
   const [configError, setConfigError] = useState("");
   const [savingConfig, setSavingConfig] = useState(false);
   const [setupCollapsed, setSetupCollapsed] = useState(true);
+  const [liveScoresCollapsed, setLiveScoresCollapsed] = useState(true);
   const [now, setNow] = useState(Date.now());
   const [buzzDelta, setBuzzDelta] = useState(0);
   const [buzzAnimTick, setBuzzAnimTick] = useState(0);
@@ -556,21 +557,40 @@ export default function AdminPage() {
 
         <div className="admin-right-rail">
           <section className="admin-panel admin-surface-card">
-            <div className="admin-section-eyebrow">Live Scores</div>
-            <div className="admin-scoreboard-list">
-              {sortedTeams.map(([teamId, team], index) => (
-                <div key={teamId} className={`admin-score-row ${index === 0 ? "leader" : ""}`}>
-                  <span className="admin-score-rank">{index + 1}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: "700", fontSize: "15px" }}>{team.teamName}</div>
-                    <div style={{ fontSize: "12px", color: "var(--muted)" }}>
-                      {formatCount(team.members?.length ?? 0, "member")} | {team.correctAnswers ?? 0} correct
-                    </div>
-                  </div>
-                  <span className="admin-score-value">{team.score}</span>
+            <button
+              type="button"
+              className="admin-section-toggle"
+              onClick={() => setLiveScoresCollapsed((current) => !current)}
+              aria-expanded={!liveScoresCollapsed}
+            >
+              <div>
+                <div className="admin-section-eyebrow">Live Scores</div>
+                <div className="admin-section-title">Scoreboard</div>
+                <div className="admin-section-meta">
+                  Starts collapsed so the host can expand it only when needed.
                 </div>
-              ))}
-            </div>
+              </div>
+              <span className={`admin-toggle-icon ${liveScoresCollapsed ? "collapsed" : ""}`}>⌃</span>
+            </button>
+
+            {!liveScoresCollapsed && (
+              <div className="admin-section-body">
+                <div className="admin-scoreboard-list">
+                  {sortedTeams.map(([teamId, team], index) => (
+                    <div key={teamId} className={`admin-score-row ${index === 0 ? "leader" : ""}`}>
+                      <span className="admin-score-rank">{index + 1}</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: "700", fontSize: "15px" }}>{team.teamName}</div>
+                        <div style={{ fontSize: "12px", color: "var(--muted)" }}>
+                          {formatCount(team.members?.length ?? 0, "member")} | {team.correctAnswers ?? 0} correct
+                        </div>
+                      </div>
+                      <span className="admin-score-value">{team.score}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
 
           {state.buzzerHistory?.length > 0 && (
