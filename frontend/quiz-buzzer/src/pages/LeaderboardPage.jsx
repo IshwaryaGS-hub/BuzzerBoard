@@ -1,42 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { socket } from "../socket";
-
-function formatCount(count, singular, plural = `${singular}s`) {
-  return `${count} ${count === 1 ? singular : plural}`;
-}
-
-function playTimesUpAlarm() {
-  if (typeof window === "undefined") return;
-
-  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextClass) return;
-
-  const context = new AudioContextClass();
-  const pattern = [0, 180, 360];
-
-  pattern.forEach((offset, index) => {
-    const oscillator = context.createOscillator();
-    const gainNode = context.createGain();
-    const startAt = context.currentTime + offset / 1000;
-    const duration = 0.14;
-
-    oscillator.type = "square";
-    oscillator.frequency.setValueAtTime(index % 2 === 0 ? 880 : 740, startAt);
-
-    gainNode.gain.setValueAtTime(0.0001, startAt);
-    gainNode.gain.exponentialRampToValueAtTime(0.18, startAt + 0.01);
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
-
-    oscillator.connect(gainNode);
-    gainNode.connect(context.destination);
-    oscillator.start(startAt);
-    oscillator.stop(startAt + duration);
-  });
-
-  window.setTimeout(() => {
-    context.close().catch(() => {});
-  }, 900);
-}
+import { playTimesUpAlarm } from "../utils/alarm";
 
 export default function LeaderboardPage() {
   const [state, setState] = useState(null);

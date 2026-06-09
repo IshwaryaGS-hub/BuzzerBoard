@@ -22,6 +22,7 @@ const DATA_DIR = process.env.DATA_DIR
   : path.join(__dirname, "storage");
 const LEGACY_SETTINGS_PATH = path.join(__dirname, "data", "settings.json");
 const SETTINGS_PATH = path.join(DATA_DIR, "settings.json");
+const IDLE_GAME_RESET_MS = Number(process.env.IDLE_GAME_RESET_MS) || 5000;
 loadEnvFile(path.join(__dirname, ".env"));
 
 const app = express();
@@ -36,6 +37,7 @@ const io = new Server(server, {
 let settings = loadSettings();
 let gameState = createInitialGameState();
 let timerInterval = null;
+let idleResetTimeout = null;
 let connectedUsers = {};
 initializeScoresFromSettings();
 
@@ -83,7 +85,7 @@ function createDefaultSettings() {
   return {
     hostPassword: process.env.HOST_PASSWORD || "apar2026",
     displayPassword: process.env.DISPLAY_PASSWORD || "screen2026",
-    teams: FIXED_TEAMS,
+    teams: FIXED_TEAMS.map((team) => ({ ...team })),
   };
 }
 
@@ -99,6 +101,7 @@ function sanitizeTeams(teams) {
       ? teams
           .map((team) => ({
             id: `${team?.id || ""}`.trim().toLowerCase(),
+            name: `${team?.name || ""}`.trim(),
             password: `${team?.password || ""}`.trim(),
           }))
           .filter((team) => team.id)
@@ -109,12 +112,15 @@ function sanitizeTeams(teams) {
     const provided =
       providedById.get(team.id) ||
       (Array.isArray(teams) && teams[index]
-        ? { password: `${teams[index]?.password || ""}`.trim() }
+        ? {
+            name: `${teams[index]?.name || ""}`.trim(),
+            password: `${teams[index]?.password || ""}`.trim(),
+          }
         : null);
 
     return {
       id: team.id,
-      name: team.name,
+      name: provided?.name || team.name,
       password: provided?.password || team.password,
     };
   });
@@ -249,17 +255,60 @@ function syncScoresWithTeams() {
   settings.teams.forEach((team) => {
     ensureTeamScore(team.id, team.name);
     gameState.scores[team.id].teamName = team.name;
+    gameState.scores[team.id].members = (gameState.scores[team.id].members || []).map((member) => ({
+      ...member,
+      name: team.name,
+    }));
   });
 
   Object.keys(gameState.playerStats).forEach((playerKey) => {
     if (!allowedTeamIds.has(gameState.playerStats[playerKey].teamId)) {
       delete gameState.playerStats[playerKey];
+      return;
+    }
+
+    const team = getTeamById(gameState.playerStats[playerKey].teamId);
+    if (team) {
+      gameState.playerStats[playerKey].teamName = team.name;
+      gameState.playerStats[playerKey].memberName = team.name;
     }
   });
+
+  Object.values(connectedUsers).forEach((user) => {
+    if (user?.role !== "player" || !user.teamId) return;
+    const team = getTeamById(user.teamId);
+    if (!team) return;
+
+    user.teamName = team.name;
+    user.memberName = team.name;
+  });
+
+  gameState.buzzerHistory = gameState.buzzerHistory.map((entry) => {
+    const team = getTeamById(entry.teamId);
+    if (!team) return entry;
+
+    return {
+      ...entry,
+      teamName: team.name,
+      memberName: team.name,
+    };
+  });
+
+  if (gameState.buzzedBy?.teamId) {
+    const team = getTeamById(gameState.buzzedBy.teamId);
+    if (team) {
+      gameState.buzzedBy = {
+        ...gameState.buzzedBy,
+        teamName: team.name,
+        memberName: team.name,
+      };
+    }
+  }
 }
 
 function resetGamePreservingKnownTeams() {
   clearInterval(timerInterval);
+  timerInterval = null;
   const nextScores = {};
 
   settings.teams.forEach((team) => {
@@ -282,6 +331,27 @@ function resetGamePreservingKnownTeams() {
     .forEach((user) => {
       ensurePlayerStats(user.teamId, user.teamName, user.memberName);
     });
+}
+
+function clearIdleReset() {
+  if (!idleResetTimeout) return;
+  clearTimeout(idleResetTimeout);
+  idleResetTimeout = null;
+}
+
+function scheduleIdleReset() {
+  clearIdleReset();
+
+  idleResetTimeout = setTimeout(() => {
+    idleResetTimeout = null;
+
+    if (Object.keys(connectedUsers).length > 0) {
+      return;
+    }
+
+    resetGamePreservingKnownTeams();
+    console.log(`Game reset after ${IDLE_GAME_RESET_MS}ms of inactivity.`);
+  }, IDLE_GAME_RESET_MS);
 }
 
 function getCurrentQuestionResult() {
@@ -387,6 +457,7 @@ function startTimer() {
     if (elapsed < gameState.timeLimit) return;
 
     clearInterval(timerInterval);
+    timerInterval = null;
     if (gameState.phase === "question" || gameState.phase === "buzzed") {
       gameState.buzzerLocked = true;
       gameState.phase = "timeup";
@@ -451,6 +522,7 @@ app.post("/api/admin/config", requireHostPassword, (req, res) => {
 
 io.on("connection", (socket) => {
   console.log("Connected:", socket.id);
+  clearIdleReset();
 
   socket.on("join-host", ({ password }) => {
     if (password !== getCurrentHostPassword()) {
@@ -537,6 +609,7 @@ io.on("connection", (socket) => {
   socket.on("host-next-question", () => {
     if (connectedUsers[socket.id]?.role !== "host") return;
     clearInterval(timerInterval);
+    timerInterval = null;
 
     const nextIndex = gameState.currentQuestionIndex + 1;
     if (nextIndex >= QUESTIONS.length) {
@@ -572,13 +645,18 @@ io.on("connection", (socket) => {
   socket.on("host-lock-buzzers", () => {
     if (connectedUsers[socket.id]?.role !== "host") return;
     clearInterval(timerInterval);
+    timerInterval = null;
     gameState.buzzerLocked = true;
+    if (gameState.buzzerHistory.length > 0) {
+      gameState.phase = "buzzed";
+    }
     broadcastState();
   });
 
   socket.on("host-reveal-answer", () => {
     if (connectedUsers[socket.id]?.role !== "host") return;
     clearInterval(timerInterval);
+    timerInterval = null;
     gameState.answerRevealed = true;
     broadcastState();
   });
@@ -612,6 +690,7 @@ io.on("connection", (socket) => {
     }
 
     clearInterval(timerInterval);
+    timerInterval = null;
     const awardedPoints = getQuestionPoints(gameState.currentQuestion);
     const playerStat = ensurePlayerStats(
       winningBuzz.teamId,
@@ -670,6 +749,7 @@ io.on("connection", (socket) => {
     }
 
     clearInterval(timerInterval);
+    timerInterval = null;
     const penaltyPoints = getQuestionPenalty(gameState.currentQuestion);
     const penalizedTeam = targetBuzz?.teamId ? gameState.scores[targetBuzz.teamId] : null;
     const penalizedPlayer =
@@ -764,12 +844,6 @@ io.on("connection", (socket) => {
       gameState.activeBuzzIndex = 0;
     }
 
-    if (gameState.buzzerHistory.length >= 3) {
-      gameState.buzzerLocked = true;
-      gameState.phase = "buzzed";
-      clearInterval(timerInterval);
-    }
-
     broadcastState();
     io.emit("buzzer-hit", {
       teamId: user.teamId,
@@ -791,6 +865,9 @@ io.on("connection", (socket) => {
     }
 
     delete connectedUsers[socket.id];
+    if (Object.keys(connectedUsers).length === 0) {
+      scheduleIdleReset();
+    }
     broadcastState();
     console.log("Disconnected:", socket.id);
   });

@@ -129,6 +129,15 @@ export default function AdminPage() {
     }));
   };
 
+  const updateTeamName = (index, name) => {
+    setConfig((current) => ({
+      ...current,
+      teams: current.teams.map((team, teamIndex) =>
+        teamIndex === index ? { ...team, name } : team
+      ),
+    }));
+  };
+
   const saveConfig = async () => {
     const normalizedTeams = config.teams
       .map((team) => ({
@@ -350,7 +359,7 @@ export default function AdminPage() {
         </div>
 
         <div style={{ color: "var(--muted)", fontSize: "13px", marginBottom: "14px" }}>
-          Fixed quiz setup for 8 teams. You can change only the passwords you want to give each team.
+          Configure up to 8 teams here. You can rename teams and change the password for each one before starting a new game.
         </div>
 
         <div style={{ display: "grid", gap: "10px", marginBottom: "16px" }}>
@@ -359,13 +368,14 @@ export default function AdminPage() {
               <input
                 type="text"
                 value={team.name}
-                readOnly
+                placeholder={`Team ${index + 1} name`}
+                onChange={(event) => updateTeamName(index, event.target.value)}
                 style={{
                   width: "100%",
                   padding: "12px 14px",
                   borderRadius: "12px",
                   border: "1px solid var(--border)",
-                  background: "rgba(255,255,255,0.02)",
+                  background: "rgba(255,255,255,0.04)",
                   color: "var(--white)",
                 }}
               />

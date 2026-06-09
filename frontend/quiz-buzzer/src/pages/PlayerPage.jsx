@@ -1,44 +1,13 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { socket } from "../socket";
-
-function playTimesUpAlarm() {
-  if (typeof window === "undefined") return;
-
-  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextClass) return;
-
-  const context = new AudioContextClass();
-  const pattern = [0, 180, 360];
-
-  pattern.forEach((offset, index) => {
-    const oscillator = context.createOscillator();
-    const gainNode = context.createGain();
-    const startAt = context.currentTime + offset / 1000;
-    const duration = 0.14;
-
-    oscillator.type = "square";
-    oscillator.frequency.setValueAtTime(index % 2 === 0 ? 880 : 740, startAt);
-
-    gainNode.gain.setValueAtTime(0.0001, startAt);
-    gainNode.gain.exponentialRampToValueAtTime(0.18, startAt + 0.01);
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
-
-    oscillator.connect(gainNode);
-    gainNode.connect(context.destination);
-    oscillator.start(startAt);
-    oscillator.stop(startAt + duration);
-  });
-
-  window.setTimeout(() => {
-    context.close().catch(() => {});
-  }, 900);
-}
+import { playTimesUpAlarm } from "../utils/alarm";
 
 export default function PlayerPage() {
   const [gameState, setGameState] = useState(null);
   const [buzzing, setBuzzing] = useState(false);
   const [notification, setNotification] = useState(null);
   const [now, setNow] = useState(Date.now());
+  const timeUpHandledRef = useRef(false);
   const player = JSON.parse(sessionStorage.getItem("player") || "{}");
 
   const navigateTo = useCallback((path) => {
@@ -106,9 +75,7 @@ export default function PlayerPage() {
       );
     });
     socket.on("times-up", () => {
-      showNotification("Time is up. Wait for the host.", "amber");
       setBuzzing(false);
-      playTimesUpAlarm();
     });
     socket.on("error", ({ message }) => {
       if (message.includes("valid team") || message.includes("team password") || message.includes("already in use")) {
@@ -132,6 +99,20 @@ export default function PlayerPage() {
       socket.off("error");
     };
   }, [navigateTo, player.memberName, player.teamId, player.teamName, player.teamPassword, showNotification]);
+
+  useEffect(() => {
+    if (gameState?.phase === "timeup" && !timeUpHandledRef.current) {
+      timeUpHandledRef.current = true;
+      setBuzzing(false);
+      showNotification("Time is up. Wait for the host.", "amber");
+      playTimesUpAlarm();
+      return;
+    }
+
+    if (gameState?.phase !== "timeup") {
+      timeUpHandledRef.current = false;
+    }
+  }, [gameState?.phase, showNotification]);
 
   useEffect(() => {
     if (gameState?.phase !== "question" && gameState?.phase !== "buzzed" && gameState?.phase !== "timeup") return undefined;
