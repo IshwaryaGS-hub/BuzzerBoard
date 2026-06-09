@@ -95,15 +95,17 @@ export default function AdminPage() {
     };
   }, [hostAuth]);
 
+  const isTimerActive = state?.phase === "question" || state?.phase === "buzzed";
+
   useEffect(() => {
-    if (state?.phase !== "question" && state?.phase !== "buzzed" && state?.phase !== "timeup") return undefined;
+    if (!isTimerActive || !state?.timerStartedAt) return undefined;
 
     const intervalId = window.setInterval(() => {
       setNow(Date.now());
     }, 250);
 
     return () => window.clearInterval(intervalId);
-  }, [state?.phase, state?.timerStartedAt]);
+  }, [isTimerActive, state?.timerStartedAt]);
 
   const emit = (event, data) => socket.emit(event, data);
   const sortedTeams = state
@@ -209,10 +211,11 @@ export default function AdminPage() {
   };
 
   const timeLeft = useMemo(() => {
-    if (!state?.timerStartedAt) return state?.timeLimit || 0;
+    if (!state?.currentQuestion) return 0;
+    if (!isTimerActive || !state?.timerStartedAt) return state?.timeLimit || 20;
     const elapsed = Math.min((now - state.timerStartedAt) / 1000, state.timeLimit || 0);
     return Math.max(0, (state.timeLimit || 0) - elapsed);
-  }, [now, state?.timerStartedAt, state?.timeLimit]);
+  }, [isTimerActive, now, state?.currentQuestion, state?.timerStartedAt, state?.timeLimit]);
 
   const question = state?.currentQuestion || null;
   const connectedTeamsCount = Object.values(state?.scores || {}).filter(
@@ -341,7 +344,7 @@ export default function AdminPage() {
         <div><span style={{ color: "var(--muted)", fontSize: "12px" }}>Buzzers </span><strong style={{ color: state.buzzerLocked ? "var(--red)" : "var(--green)" }}>{state.buzzerLocked ? "LOCKED" : "OPEN"}</strong></div>
         <div style={{ marginLeft: "auto" }}>
           <div className="quiz-hud-side">
-            <div className={`quiz-hud-orb timer ${timeLeft <= 8 ? "alert" : ""}`}>
+            <div className={`quiz-hud-orb timer ${isTimerActive && timeLeft <= 8 ? "alert" : ""}`}>
               <div style={{ textAlign: "center" }}>
                 <div className="value">{Math.ceil(timeLeft)}</div>
                 <div className="label">Seconds Left</div>

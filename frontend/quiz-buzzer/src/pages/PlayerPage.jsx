@@ -114,15 +114,17 @@ export default function PlayerPage() {
     }
   }, [gameState?.phase, showNotification]);
 
+  const isTimerActive = gameState?.phase === "question" || gameState?.phase === "buzzed";
+
   useEffect(() => {
-    if (gameState?.phase !== "question" && gameState?.phase !== "buzzed" && gameState?.phase !== "timeup") return undefined;
+    if (!isTimerActive || !gameState?.timerStartedAt) return undefined;
 
     const intervalId = window.setInterval(() => {
       setNow(Date.now());
     }, 250);
 
     return () => window.clearInterval(intervalId);
-  }, [gameState?.phase, gameState?.timerStartedAt]);
+  }, [gameState?.timerStartedAt, isTimerActive]);
 
   const handleBuzz = useCallback(() => {
     if (buzzing || gameState?.buzzerLocked) return;
@@ -154,10 +156,12 @@ export default function PlayerPage() {
     (gameState.buzzerHistory || []).findIndex(
       (entry) => entry.teamId === player.teamId && entry.memberName === player.memberName
     ) >= 0;
-  const timeElapsed = gameState.timerStartedAt
+  const timeElapsed = isTimerActive && gameState.timerStartedAt
     ? Math.min((now - gameState.timerStartedAt) / 1000, gameState.timeLimit)
     : 0;
-  const timeLeft = Math.max(0, gameState.timeLimit - timeElapsed);
+  const timeLeft = gameState?.currentQuestion
+    ? Math.max(0, (gameState.timeLimit || 20) - timeElapsed)
+    : 0;
   const currentScore = gameState?.scores?.[player.teamId]?.score || 0;
   const currentWins = gameState?.scores?.[player.teamId]?.correctAnswers || 0;
   const isTimeUp = gameState?.phase === "timeup";
@@ -202,7 +206,7 @@ export default function PlayerPage() {
             textAlign: "center",
           }}
         >
-          <div className={`timer-mini ${timeLeft <= 8 || isTimeUp ? "alert" : ""}`} style={{ margin: "0 auto 18px" }}>
+          <div className={`timer-mini ${((isTimerActive && timeLeft <= 8) || isTimeUp) ? "alert" : ""}`} style={{ margin: "0 auto 18px" }}>
             <div style={{ textAlign: "center" }}>
               <div className="value">{Math.ceil(timeLeft)}</div>
               <div className="label">Seconds</div>

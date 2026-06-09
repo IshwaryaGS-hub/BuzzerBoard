@@ -748,8 +748,6 @@ io.on("connection", (socket) => {
       return;
     }
 
-    clearInterval(timerInterval);
-    timerInterval = null;
     const penaltyPoints = getQuestionPenalty(gameState.currentQuestion);
     const penalizedTeam = targetBuzz?.teamId ? gameState.scores[targetBuzz.teamId] : null;
     const penalizedPlayer =
@@ -772,12 +770,30 @@ io.on("connection", (socket) => {
 
     if (nextIndex >= 0) {
       gameState.buzzerLocked = true;
+      gameState.phase = "buzzed";
       gameState.activeBuzzIndex = nextIndex;
       broadcastState();
       io.emit("answer-wrong", { teamId: targetBuzz.teamId, buzzerId: targetBuzz.id, hasNext: true });
       return;
     }
 
+    const remainingEligibleTeams = settings.teams.filter(
+      (team) => !gameState.buzzerHistory.some((entry) => entry.teamId === team.id)
+    );
+
+    if (remainingEligibleTeams.length > 0) {
+      gameState.phase = "question";
+      gameState.buzzerLocked = false;
+      gameState.activeBuzzIndex = null;
+      gameState.buzzedBy = null;
+      broadcastState();
+      io.emit("buzzers-unlocked");
+      io.emit("answer-wrong", { teamId: targetBuzz.teamId, buzzerId: targetBuzz.id, hasNext: true });
+      return;
+    }
+
+    clearInterval(timerInterval);
+    timerInterval = null;
     gameState.buzzerLocked = true;
     gameState.phase = "answer";
     gameState.activeBuzzIndex = null;

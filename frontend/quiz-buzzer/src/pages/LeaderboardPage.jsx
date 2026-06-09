@@ -40,15 +40,17 @@ export default function LeaderboardPage() {
     };
   }, [frontScreenAuth]);
 
+  const isTimerActive = state?.phase === "question" || state?.phase === "buzzed";
+
   useEffect(() => {
-    if (state?.phase !== "question" && state?.phase !== "buzzed" && state?.phase !== "timeup") return undefined;
+    if (!isTimerActive || !state?.timerStartedAt) return undefined;
 
     const intervalId = window.setInterval(() => {
       setNow(Date.now());
     }, 250);
 
     return () => window.clearInterval(intervalId);
-  }, [state?.phase, state?.timerStartedAt]);
+  }, [isTimerActive, state?.timerStartedAt]);
 
   const sortedTeams = useMemo(() => {
     if (!state?.scores) return [];
@@ -58,10 +60,12 @@ export default function LeaderboardPage() {
   const question = state?.currentQuestion || null;
   const currentQuestionNumber = Math.max((state?.currentQuestionIndex ?? -1) + 1, 0);
   const buzzCount = state?.buzzerHistory?.length || 0;
-  const timeElapsed = state?.timerStartedAt
+  const timeElapsed = isTimerActive && state?.timerStartedAt
     ? Math.min((now - state.timerStartedAt) / 1000, state.timeLimit || 0)
     : 0;
-  const timeLeft = Math.max(0, (state?.timeLimit || 0) - timeElapsed);
+  const timeLeft = question
+    ? Math.max(0, (state?.timeLimit || 20) - timeElapsed)
+    : 0;
   const latestResult = state?.questionResults?.length
     ? state.questionResults[state.questionResults.length - 1]
     : null;
@@ -278,7 +282,7 @@ export default function LeaderboardPage() {
           </div>
 
           <div className="quiz-hud-side" style={{ justifySelf: "end" }}>
-            <div className={`quiz-hud-orb timer ${timeLeft <= 8 && (state?.phase === "question" || state?.phase === "buzzed" || state?.phase === "timeup") ? "alert" : ""}`}>
+            <div className={`quiz-hud-orb timer ${isTimerActive && timeLeft <= 8 ? "alert" : ""}`}>
               <div style={{ textAlign: "center" }}>
                 <div className="value">{Math.ceil(timeLeft || 0)}</div>
                 <div className="label">Seconds</div>
