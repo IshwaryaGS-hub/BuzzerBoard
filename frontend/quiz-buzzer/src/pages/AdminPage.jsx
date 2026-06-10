@@ -294,13 +294,16 @@ export default function AdminPage() {
     <div className="quiz-shell quiz-stage-shell host-shell">
       <div className="host-frame">
       <div className="glass-panel host-topbar">
-        <div>
-          <BrandMark variant="udaan" compact className="brand-mark-host" />
-          <div className={`connection-pill ${connectionState}`}>
-            {isConnected ? "Live connection" : isRecovering ? "Reconnecting..." : "Offline"}
+        <div className="page-intro host-topbar-intro">
+          <div className="page-intro-meta">
+            <BrandMark variant="udaan" compact className="brand-mark-host" />
+            <div className={`connection-pill ${connectionState}`}>
+              {isConnected ? "Live connection" : isRecovering ? "Reconnecting..." : "Offline"}
+            </div>
           </div>
-          <div style={{ fontSize: "12px", letterSpacing: "4px", color: "var(--amber)" }}>HOST PANEL</div>
+          <div className="page-intro-label">Host Panel</div>
           <h1 className="host-topbar-title">Quiz Control</h1>
+          <div className="page-intro-copy">Run the board, manage setup, and keep the round flow crisp from one responsive control surface.</div>
         </div>
         <div className="host-topbar-actions">
           <a
@@ -348,23 +351,14 @@ export default function AdminPage() {
 
       <div
         className="admin-statusbar"
-        style={{
-          background: "var(--card)",
-          border: "1px solid var(--border)",
-          borderRadius: "14px",
-          padding: "16px 24px",
-          marginBottom: "24px",
-          display: "flex",
-          gap: "24px",
-          flexWrap: "wrap",
-          alignItems: "center",
-        }}
       >
-        <div><span style={{ color: "var(--muted)", fontSize: "12px" }}>Phase </span><strong style={{ color: "var(--amber)", textTransform: "uppercase" }}>{state.phase}</strong></div>
-        <div><span style={{ color: "var(--muted)", fontSize: "12px" }}>Question </span><strong>{state.currentQuestionIndex + 1} / {state.totalQuestions || "-"}</strong></div>
-        <div><span style={{ color: "var(--muted)", fontSize: "12px" }}>Teams online </span><strong style={{ color: "var(--green)" }}>{connectedTeamsCount} / 8</strong></div>
-        <div><span style={{ color: "var(--muted)", fontSize: "12px" }}>Buzzers </span><strong style={{ color: state.buzzerLocked ? "var(--red)" : "var(--green)" }}>{state.buzzerLocked ? "LOCKED" : "OPEN"}</strong></div>
-        <div style={{ marginLeft: "auto" }}>
+        <div className="admin-status-items">
+          <div className="admin-status-item"><span>Phase</span><strong style={{ color: "var(--amber)", textTransform: "uppercase" }}>{state.phase}</strong></div>
+          <div className="admin-status-item"><span>Question</span><strong>{state.currentQuestionIndex + 1} / {state.totalQuestions || "-"}</strong></div>
+          <div className="admin-status-item"><span>Teams online</span><strong style={{ color: "var(--green)" }}>{connectedTeamsCount} / 8</strong></div>
+          <div className="admin-status-item"><span>Buzzers</span><strong style={{ color: state.buzzerLocked ? "var(--red)" : "var(--green)" }}>{state.buzzerLocked ? "LOCKED" : "OPEN"}</strong></div>
+        </div>
+        <div className="admin-status-hud">
           <div className="quiz-hud-side">
             <div className={`quiz-hud-orb timer ${isTimerActive && timeLeft <= 8 ? "alert" : ""}`}>
               <div style={{ textAlign: "center" }}>

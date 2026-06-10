@@ -198,15 +198,18 @@ export default function PlayerPage() {
             textAlign: "center",
           }}
         >
-          <BrandMark variant="udaan" compact className="brand-mark-player" />
-          <div className={`connection-pill ${connectionState}`} style={{ marginInline: "auto" }}>
-            {isConnected ? "Connected" : isRecovering ? "Reconnecting..." : "Offline"}
+          <div className="page-intro page-intro-centered">
+            <div className="page-intro-meta page-intro-meta-centered">
+              <BrandMark variant="udaan" compact className="brand-mark-player" />
+              <div className={`connection-pill ${connectionState}`}>
+                {isConnected ? "Connected" : isRecovering ? "Reconnecting..." : "Offline"}
+              </div>
+            </div>
           </div>
           <div className="status-pill" style={{ margin: "0 auto 14px", width: "fit-content" }}>
             <span className="status-dot" />
             Player Device
           </div>
-          <div className="championship-eyebrow" style={{ marginBottom: "10px", letterSpacing: "0.24em" }}>Player Device</div>
           <div style={{ fontSize: "clamp(26px, 5vw, 40px)", fontWeight: 900 }}>{player.teamName}</div>
           <div style={{ color: "var(--muted)", marginTop: "4px", fontSize: "16px" }}>Current mark: {currentScore} pts</div>
           <div className="player-metrics">

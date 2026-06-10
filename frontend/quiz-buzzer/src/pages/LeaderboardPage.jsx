@@ -290,12 +290,14 @@ export default function LeaderboardPage() {
             marginBottom: "26px",
           }}
         >
-          <div>
-            <BrandMark variant="udaan" compact className="brand-mark-frontboard" />
-            <div className={`connection-pill ${connectionState}`}>
-              {isConnected ? "Screen synced" : isRecovering ? "Recovering screen..." : "Offline"}
+          <div className="page-intro">
+            <div className="page-intro-meta">
+              <BrandMark variant="udaan" compact className="brand-mark-frontboard" />
+              <div className={`connection-pill ${connectionState}`}>
+                {isConnected ? "Screen synced" : isRecovering ? "Recovering screen..." : "Offline"}
+              </div>
             </div>
-            <div className="championship-eyebrow" style={{ marginBottom: "10px" }}>Organizer Screen</div>
+            <div className="page-intro-label">Organizer Screen</div>
             <div className="frontboard-title" style={{ fontSize: "clamp(44px, 6vw, 84px)", fontWeight: 900, lineHeight: 0.94 }}>
               LIVE <span style={{ color: "var(--amber)" }}>QUIZ BOARD</span>
             </div>
