@@ -190,28 +190,25 @@ export default function PlayerPage() {
         : { bg: "rgba(240, 171, 34, 0.12)", border: "rgba(240, 171, 34, 0.45)", text: "var(--amber)" };
 
   return (
-    <div className="quiz-shell quiz-stage-shell" style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: "18px" }}>
+    <div className="quiz-shell quiz-stage-shell player-shell">
       <div className="player-stack">
         <div
           className="glass-panel player-panel"
-          style={{
-            textAlign: "center",
-          }}
         >
-          <div className="page-intro page-intro-centered">
-            <div className="page-intro-meta page-intro-meta-centered">
+          <div className="page-intro page-intro-centered player-intro">
+            <div className="player-brand-lockup">
               <BrandMark variant="udaan" compact className="brand-mark-player" />
               <div className={`connection-pill ${connectionState}`}>
                 {isConnected ? "Connected" : isRecovering ? "Reconnecting..." : "Offline"}
               </div>
             </div>
           </div>
-          <div className="status-pill" style={{ margin: "0 auto 14px", width: "fit-content" }}>
+          <div className="status-pill player-device-pill">
             <span className="status-dot" />
             Player Device
           </div>
-          <div style={{ fontSize: "clamp(26px, 5vw, 40px)", fontWeight: 900 }}>{player.teamName}</div>
-          <div style={{ color: "var(--muted)", marginTop: "4px", fontSize: "16px" }}>Current mark: {currentScore} pts</div>
+          <div className="player-team-name">{player.teamName}</div>
+          <div className="player-scoreline">Current mark: {currentScore} pts</div>
           <div className="player-metrics">
             <div className="player-metric-card">
               <div className="value" style={{ color: "var(--amber)" }}>{currentScore}</div>
@@ -226,21 +223,18 @@ export default function PlayerPage() {
 
         <div
           className="surface-card accent player-panel"
-          style={{
-            textAlign: "center",
-          }}
         >
-          <div className={`timer-mini ${((isTimerActive && timeLeft <= 8) || isTimeUp) ? "alert" : ""}`} style={{ margin: "0 auto 18px" }}>
+          <div className={`timer-mini ${((isTimerActive && timeLeft <= 8) || isTimeUp) ? "alert" : ""} player-timer`}>
             <div style={{ textAlign: "center" }}>
               <div className="value">{Math.ceil(timeLeft)}</div>
               <div className="label">Seconds</div>
             </div>
           </div>
 
-          <div style={{ color: "var(--amber)", letterSpacing: "0.22em", textTransform: "uppercase", fontSize: "13px", marginBottom: "8px" }}>
+          <div className="player-phase-label">
             {isTimeUp ? "verbal answer round" : gameState.phase}
           </div>
-          <div style={{ color: "var(--muted)", fontSize: "15px", marginBottom: "22px", lineHeight: 1.5 }}>
+          <div className="player-phase-copy">
             {isRecovering
               ? "Connection is recovering. Your session will resume automatically."
               : "Watch the main screen for the question. Use this device only for buzzing."}
