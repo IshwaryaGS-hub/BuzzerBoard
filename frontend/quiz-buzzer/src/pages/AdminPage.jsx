@@ -265,9 +265,10 @@ export default function AdminPage() {
     (typeof state?.activeBuzzIndex === "number" && state.activeBuzzIndex >= 0
       ? state?.buzzerHistory?.[state.activeBuzzIndex]?.id
       : null);
-  const canLoadNextQuestion = isConnected && (state.phase !== "question" || state.buzzerLocked);
-  const canUnlockBuzzers = isConnected && Boolean(question) && state.phase === "question" && state.buzzerLocked;
-  const canLockBuzzers = isConnected && state.phase === "question" && !state.buzzerLocked;
+  const canLoadNextQuestion = isConnected && (!state || state.phase !== "question" || state.buzzerLocked);
+  const canUnlockBuzzers =
+    isConnected && Boolean(question) && state?.phase === "question" && state?.buzzerLocked;
+  const canLockBuzzers = isConnected && state?.phase === "question" && !state?.buzzerLocked;
 
   useEffect(() => {
     const previous = previousBuzzCountRef.current;
