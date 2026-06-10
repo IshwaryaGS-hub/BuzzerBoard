@@ -14,10 +14,7 @@ export default function FrontScreenLoginPage() {
   const handleScreenJoin = () => {
     setLoading(true);
     setError("");
-    socket.connect();
-    socket.emit("join-spectator", { password: screenPass });
-
-    socket.once("joined-spectator", ({ success }) => {
+    const onJoinedSpectator = ({ success }) => {
       if (!success) {
         setError("Wrong password");
         setLoading(false);
@@ -25,13 +22,24 @@ export default function FrontScreenLoginPage() {
       }
 
       sessionStorage.setItem("frontScreenAuth", screenPass);
+      cleanup();
       navigateTo("/leaderboard");
-    });
-
-    socket.once("error", ({ message }) => {
+    };
+    const onError = ({ message }) => {
       setError(message);
       setLoading(false);
-    });
+      cleanup();
+    };
+    const cleanup = () => {
+      socket.off("joined-spectator", onJoinedSpectator);
+      socket.off("error", onError);
+    };
+
+    cleanup();
+    socket.on("joined-spectator", onJoinedSpectator);
+    socket.on("error", onError);
+    if (!socket.connected) socket.connect();
+    socket.emit("join-spectator", { password: screenPass });
   };
 
   return (

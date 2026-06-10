@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { socket } from "../socket";
 import { playTimesUpAlarm } from "../utils/alarm";
+import BrandMark from "../components/BrandMark";
+import useSocketConnection from "../hooks/useSocketConnection";
 
 export default function PlayerPage() {
   const [gameState, setGameState] = useState(null);
@@ -9,6 +11,7 @@ export default function PlayerPage() {
   const [now, setNow] = useState(Date.now());
   const timeUpHandledRef = useRef(false);
   const player = JSON.parse(sessionStorage.getItem("player") || "{}");
+  const { connectionState, isConnected, isRecovering } = useSocketConnection();
 
   const navigateTo = useCallback((path) => {
     window.history.pushState({}, "", path);
@@ -26,14 +29,14 @@ export default function PlayerPage() {
       return;
     }
 
-    if (!socket.connected) socket.connect();
-    socket.emit("join-player", {
-      teamId: player.teamId,
-      teamPassword: player.teamPassword,
-    });
+    const joinPlayer = () => {
+      socket.emit("join-player", {
+        teamId: player.teamId,
+        teamPassword: player.teamPassword,
+      });
+    };
 
-    socket.on("game-state", setGameState);
-    socket.on("joined-player", ({ success, teamId, teamName, memberName }) => {
+    const onJoinedPlayer = ({ success, teamId, teamName, memberName }) => {
       if (!success) {
         sessionStorage.removeItem("player");
         navigateTo("/");
@@ -49,7 +52,12 @@ export default function PlayerPage() {
           teamPassword: player.teamPassword,
         })
       );
-    });
+    };
+
+    if (!socket.connected) socket.connect();
+    socket.on("connect", joinPlayer);
+    socket.on("game-state", setGameState);
+    socket.on("joined-player", onJoinedPlayer);
     socket.on("buzzer-hit", ({ teamId, memberName, timeMs, teamName }) => {
       if (teamId === player.teamId && memberName === player.memberName) {
         showNotification(`You buzzed in ${(timeMs / 1000).toFixed(2)}s`, "green");
@@ -87,9 +95,14 @@ export default function PlayerPage() {
       showNotification(message, "red");
     });
 
+    if (socket.connected) {
+      joinPlayer();
+    }
+
     return () => {
+      socket.off("connect", joinPlayer);
       socket.off("game-state");
-      socket.off("joined-player");
+      socket.off("joined-player", onJoinedPlayer);
       socket.off("buzzer-hit");
       socket.off("buzz-rejected");
       socket.off("buzzers-unlocked");
@@ -127,10 +140,12 @@ export default function PlayerPage() {
   }, [gameState?.timerStartedAt, isTimerActive]);
 
   const handleBuzz = useCallback(() => {
-    if (buzzing || gameState?.buzzerLocked) return;
+    if (!isConnected || buzzing || gameState?.buzzerLocked || gameState?.phase !== "question" || hasBuzzedRef.current) return;
     setBuzzing(true);
     socket.emit("player-buzz");
-  }, [buzzing, gameState?.buzzerLocked]);
+  }, [buzzing, gameState?.buzzerLocked, gameState?.phase, isConnected]);
+
+  const hasBuzzedRef = useRef(false);
 
   useEffect(() => {
     const onKey = (event) => {
@@ -156,6 +171,8 @@ export default function PlayerPage() {
     (gameState.buzzerHistory || []).findIndex(
       (entry) => entry.teamId === player.teamId && entry.memberName === player.memberName
     ) >= 0;
+  hasBuzzedRef.current = hasBuzzed;
+  const canBuzz = isConnected && gameState?.phase === "question" && !gameState?.buzzerLocked && !hasBuzzed;
   const timeElapsed = isTimerActive && gameState.timerStartedAt
     ? Math.min((now - gameState.timerStartedAt) / 1000, gameState.timeLimit)
     : 0;
@@ -181,6 +198,10 @@ export default function PlayerPage() {
             textAlign: "center",
           }}
         >
+          <BrandMark variant="udaan" compact className="brand-mark-player" />
+          <div className={`connection-pill ${connectionState}`} style={{ marginInline: "auto" }}>
+            {isConnected ? "Connected" : isRecovering ? "Reconnecting..." : "Offline"}
+          </div>
           <div className="status-pill" style={{ margin: "0 auto 14px", width: "fit-content" }}>
             <span className="status-dot" />
             Player Device
@@ -217,7 +238,9 @@ export default function PlayerPage() {
             {isTimeUp ? "verbal answer round" : gameState.phase}
           </div>
           <div style={{ color: "var(--muted)", fontSize: "15px", marginBottom: "22px", lineHeight: 1.5 }}>
-            Watch the main screen for the question. Use this device only for buzzing.
+            {isRecovering
+              ? "Connection is recovering. Your session will resume automatically."
+              : "Watch the main screen for the question. Use this device only for buzzing."}
           </div>
 
           {isTimeUp && (
@@ -256,11 +279,11 @@ export default function PlayerPage() {
 
           <button
             onClick={handleBuzz}
-            disabled={gameState.buzzerLocked || hasBuzzed}
-            className={`stage-cta ${gameState.buzzerLocked || hasBuzzed ? "muted" : "live"}`}
+            disabled={!canBuzz}
+            className={`stage-cta ${canBuzz ? "live" : "muted"}`}
             style={{ minWidth: "100%" }}
           >
-            {gameState.buzzerLocked ? (hasBuzzed ? "Buzzed" : "Locked") : (buzzing ? "Buzzing..." : "Buzz")}
+            {hasBuzzed ? "Buzzed" : !canBuzz ? "Locked" : (buzzing ? "Buzzing..." : "Buzz")}
           </button>
         </div>
 
@@ -274,6 +297,11 @@ export default function PlayerPage() {
             }}
           >
             {notification.msg}
+          </div>
+        )}
+        {isRecovering && (
+          <div className="connection-overlay player">
+            Reconnecting to the live quiz. No refresh needed.
           </div>
         )}
       </div>

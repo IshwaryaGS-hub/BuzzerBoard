@@ -14,10 +14,7 @@ export default function HostLoginPage() {
   const handleAdminJoin = () => {
     setLoading(true);
     setError("");
-    socket.connect();
-    socket.emit("join-host", { password: adminPass });
-
-    socket.once("joined-host", ({ success }) => {
+    const onJoinedHost = ({ success }) => {
       if (!success) {
         setError("Wrong password");
         setLoading(false);
@@ -25,13 +22,24 @@ export default function HostLoginPage() {
       }
 
       sessionStorage.setItem("hostAuth", adminPass);
+      cleanup();
       navigateTo("/admin");
-    });
-
-    socket.once("error", ({ message }) => {
+    };
+    const onError = ({ message }) => {
       setError(message);
       setLoading(false);
-    });
+      cleanup();
+    };
+    const cleanup = () => {
+      socket.off("joined-host", onJoinedHost);
+      socket.off("error", onError);
+    };
+
+    cleanup();
+    socket.on("joined-host", onJoinedHost);
+    socket.on("error", onError);
+    if (!socket.connected) socket.connect();
+    socket.emit("join-host", { password: adminPass });
   };
 
   return (

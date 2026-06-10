@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { socket } from "../socket";
 import { playTimesUpAlarm } from "../utils/alarm";
 import PlayInstructions from "../components/PlayInstructions";
+import BrandMark from "../components/BrandMark";
+import useSocketConnection from "../hooks/useSocketConnection";
+import CrownBadge from "../components/CrownBadge";
 
 export default function LeaderboardPage() {
   const [state, setState] = useState(null);
@@ -12,6 +15,7 @@ export default function LeaderboardPage() {
   const timesUpTriggeredRef = useRef(false);
   const previousBuzzCountRef = useRef(0);
   const frontScreenAuth = sessionStorage.getItem("frontScreenAuth") || "";
+  const { connectionState, isConnected, isRecovering } = useSocketConnection();
 
   const navigateTo = (path) => {
     window.history.pushState({}, "", path);
@@ -24,19 +28,29 @@ export default function LeaderboardPage() {
       return;
     }
 
-    if (!socket.connected) socket.connect();
-    socket.emit("join-spectator", { password: frontScreenAuth });
-    socket.on("game-state", setState);
-    socket.on("error", ({ message }) => {
+    const joinSpectator = () => {
+      socket.emit("join-spectator", { password: frontScreenAuth });
+    };
+    const onError = ({ message }) => {
       if (message === "Invalid front screen password") {
         sessionStorage.removeItem("frontScreenAuth");
         navigateTo("/screen-login");
       }
-    });
+    };
+
+    if (!socket.connected) socket.connect();
+    socket.on("connect", joinSpectator);
+    socket.on("game-state", setState);
+    socket.on("error", onError);
+
+    if (socket.connected) {
+      joinSpectator();
+    }
 
     return () => {
+      socket.off("connect", joinSpectator);
       socket.off("game-state");
-      socket.off("error");
+      socket.off("error", onError);
     };
   }, [frontScreenAuth]);
 
@@ -261,6 +275,11 @@ export default function LeaderboardPage() {
       style={{ minHeight: "100vh", padding: "clamp(10px, 1.6vw, 22px) clamp(10px, 1.4vw, 20px) clamp(14px, 2vh, 28px)" }}
     >
       <div className="frontboard-frame" style={{ maxWidth: "1540px", margin: "0 auto" }}>
+        {isRecovering && (
+          <div className="connection-overlay">
+            Front screen is reconnecting and will resume automatically.
+          </div>
+        )}
         <div
           className="frontboard-header"
           style={{
@@ -272,6 +291,10 @@ export default function LeaderboardPage() {
           }}
         >
           <div>
+            <BrandMark variant="udaan" compact className="brand-mark-frontboard" />
+            <div className={`connection-pill ${connectionState}`}>
+              {isConnected ? "Screen synced" : isRecovering ? "Recovering screen..." : "Offline"}
+            </div>
             <div className="championship-eyebrow" style={{ marginBottom: "10px" }}>Organizer Screen</div>
             <div className="frontboard-title" style={{ fontSize: "clamp(44px, 6vw, 84px)", fontWeight: 900, lineHeight: 0.94 }}>
               LIVE <span style={{ color: "var(--amber)" }}>QUIZ BOARD</span>
@@ -365,6 +388,12 @@ export default function LeaderboardPage() {
               <div className="podium-strip">
                 {topThreeTeams.map(([teamId, team], index) => (
                   <div key={teamId} className={`podium-mini-card rank-${index + 1}`}>
+                    {index === 0 && (
+                      <CrownBadge
+                        label={state?.phase === "finished" ? "Overall Winner" : "Round Leader"}
+                        className="podium-crown"
+                      />
+                    )}
                     <div className={`rank-medal ${getRankMedalClass(index)}`}>{index + 1}</div>
                     <div className="podium-mini-name">{team.teamName}</div>
                     <div className="podium-mini-meta">
@@ -590,6 +619,7 @@ export default function LeaderboardPage() {
             >
               {winningBuzzEntry && (
                 <div className="winner-team-card winner-flash">
+                  <CrownBadge label="Round Winner" className="winner-crown" />
                   <div className="winner-team-label">Winning Team</div>
                   <div className="winner-team-name">{winningBuzzEntry.teamName}</div>
                   <div className="winner-team-meta">

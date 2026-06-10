@@ -636,6 +636,7 @@ io.on("connection", (socket) => {
 
   socket.on("host-unlock-buzzers", () => {
     if (connectedUsers[socket.id]?.role !== "host") return;
+    if (!gameState.currentQuestion || gameState.phase !== "question") return;
     gameState.buzzerLocked = false;
     startTimer();
     broadcastState();
@@ -644,6 +645,7 @@ io.on("connection", (socket) => {
 
   socket.on("host-lock-buzzers", () => {
     if (connectedUsers[socket.id]?.role !== "host") return;
+    if (!gameState.currentQuestion || gameState.phase !== "question") return;
     clearInterval(timerInterval);
     timerInterval = null;
     gameState.buzzerLocked = true;
@@ -786,6 +788,7 @@ io.on("connection", (socket) => {
       gameState.buzzerLocked = false;
       gameState.activeBuzzIndex = null;
       gameState.buzzedBy = null;
+      startTimer();
       broadcastState();
       io.emit("buzzers-unlocked");
       io.emit("answer-wrong", { teamId: targetBuzz.teamId, buzzerId: targetBuzz.id, hasNext: true });

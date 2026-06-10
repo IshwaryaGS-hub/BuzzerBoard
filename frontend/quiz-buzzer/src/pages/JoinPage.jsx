@@ -53,13 +53,7 @@ export default function JoinPage() {
 
     setLoading(true);
     setError("");
-    socket.connect();
-    socket.emit("join-player", {
-      teamId: team.id,
-      teamPassword: teamPassword.trim(),
-    });
-
-    socket.once("joined-player", ({ success, teamId, teamName, memberName, teamPassword: confirmedPassword }) => {
+    const onJoinedPlayer = ({ success, teamId, teamName, memberName, teamPassword: confirmedPassword }) => {
       if (!success) return;
 
       sessionStorage.setItem(
@@ -71,12 +65,26 @@ export default function JoinPage() {
           teamPassword: confirmedPassword || teamPassword.trim(),
         })
       );
+      cleanup();
       navigateTo("/play");
-    });
-
-    socket.once("error", ({ message }) => {
+    };
+    const onError = ({ message }) => {
       setError(message);
       setLoading(false);
+      cleanup();
+    };
+    const cleanup = () => {
+      socket.off("joined-player", onJoinedPlayer);
+      socket.off("error", onError);
+    };
+
+    cleanup();
+    socket.on("joined-player", onJoinedPlayer);
+    socket.on("error", onError);
+    if (!socket.connected) socket.connect();
+    socket.emit("join-player", {
+      teamId: team.id,
+      teamPassword: teamPassword.trim(),
     });
   };
 

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { socket } from "../socket";
+import BrandMark from "../components/BrandMark";
+import useSocketConnection from "../hooks/useSocketConnection";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4001";
 
@@ -20,6 +22,7 @@ export default function AdminPage() {
   const [buzzAnimTick, setBuzzAnimTick] = useState(0);
   const previousBuzzCountRef = useRef(0);
   const hostAuth = sessionStorage.getItem("hostAuth") || "";
+  const { connectionState, isConnected, isRecovering } = useSocketConnection();
 
   const navigateTo = (path) => {
     window.history.pushState({}, "", path);
@@ -32,18 +35,17 @@ export default function AdminPage() {
       return;
     }
 
-    if (!socket.connected) socket.connect();
-    socket.emit("join-host", { password: hostAuth });
-
-    socket.on("game-state", setState);
-    socket.on("quiz-config", (nextConfig) => {
+    const syncConfig = (nextConfig) => {
       setConfig({
         hostPassword: nextConfig.hostPassword || "",
         displayPassword: nextConfig.displayPassword || "",
         teams: Array.isArray(nextConfig.teams) ? nextConfig.teams : [],
       });
-    });
-    socket.on("joined-host", ({ success, config: hostConfig }) => {
+    };
+    const joinHost = () => {
+      socket.emit("join-host", { password: hostAuth });
+    };
+    const onJoinedHost = ({ success, config: hostConfig }) => {
       if (!success) {
         sessionStorage.removeItem("hostAuth");
         navigateTo("/");
@@ -51,14 +53,10 @@ export default function AdminPage() {
       }
 
       if (hostConfig) {
-        setConfig({
-          hostPassword: hostConfig.hostPassword || "",
-          displayPassword: hostConfig.displayPassword || "",
-          teams: Array.isArray(hostConfig.teams) ? hostConfig.teams : [],
-        });
+        syncConfig(hostConfig);
       }
-    });
-    socket.on("error", ({ message }) => {
+    };
+    const onError = ({ message }) => {
       if (message === "Invalid host password") {
         sessionStorage.removeItem("hostAuth");
         navigateTo("/");
@@ -66,7 +64,18 @@ export default function AdminPage() {
       }
 
       setConfigError(message);
-    });
+    };
+
+    if (!socket.connected) socket.connect();
+    socket.on("connect", joinHost);
+    socket.on("game-state", setState);
+    socket.on("quiz-config", syncConfig);
+    socket.on("joined-host", onJoinedHost);
+    socket.on("error", onError);
+
+    if (socket.connected) {
+      joinHost();
+    }
 
     fetch(`${API_BASE_URL}/api/admin/config`, {
       headers: { "x-host-password": hostAuth },
@@ -89,10 +98,11 @@ export default function AdminPage() {
       });
 
     return () => {
+      socket.off("connect", joinHost);
       socket.off("game-state");
-      socket.off("quiz-config");
-      socket.off("joined-host");
-      socket.off("error");
+      socket.off("quiz-config", syncConfig);
+      socket.off("joined-host", onJoinedHost);
+      socket.off("error", onError);
     };
   }, [hostAuth]);
 
@@ -108,7 +118,10 @@ export default function AdminPage() {
     return () => window.clearInterval(intervalId);
   }, [isTimerActive, state?.timerStartedAt]);
 
-  const emit = (event, data) => socket.emit(event, data);
+  const emit = (event, data) => {
+    if (!isConnected) return;
+    socket.emit(event, data);
+  };
   const sortedTeams = state
     ? Object.entries(state.scores).sort((left, right) => right[1].score - left[1].score)
     : [];
@@ -252,6 +265,9 @@ export default function AdminPage() {
     (typeof state?.activeBuzzIndex === "number" && state.activeBuzzIndex >= 0
       ? state?.buzzerHistory?.[state.activeBuzzIndex]?.id
       : null);
+  const canLoadNextQuestion = isConnected && (state.phase !== "question" || state.buzzerLocked);
+  const canUnlockBuzzers = isConnected && Boolean(question) && state.phase === "question" && state.buzzerLocked;
+  const canLockBuzzers = isConnected && state.phase === "question" && !state.buzzerLocked;
 
   useEffect(() => {
     const previous = previousBuzzCountRef.current;
@@ -278,6 +294,10 @@ export default function AdminPage() {
       <div className="host-frame">
       <div className="glass-panel host-topbar">
         <div>
+          <BrandMark variant="udaan" compact className="brand-mark-host" />
+          <div className={`connection-pill ${connectionState}`}>
+            {isConnected ? "Live connection" : isRecovering ? "Reconnecting..." : "Offline"}
+          </div>
           <div style={{ fontSize: "12px", letterSpacing: "4px", color: "var(--amber)" }}>HOST PANEL</div>
           <h1 className="host-topbar-title">Quiz Control</h1>
         </div>
@@ -361,6 +381,11 @@ export default function AdminPage() {
       </div>
 
       <div className="admin-workspace">
+        {isRecovering && (
+          <div className="connection-overlay">
+            Connection dropped. Recovering host controls without refresh.
+          </div>
+        )}
         <div className="admin-left-rail">
           <section className="admin-setup-panel admin-surface-card">
             <button
@@ -510,20 +535,21 @@ export default function AdminPage() {
             <div className="admin-controls-grid">
               <button
                 onClick={() => emit("host-next-question")}
+                disabled={!canLoadNextQuestion}
                 className="admin-primary-button"
               >
                 Next Question
               </button>
               <button
                 onClick={() => emit("host-unlock-buzzers")}
-                disabled={!state.buzzerLocked}
+                disabled={!canUnlockBuzzers}
                 className="admin-secondary-button success"
               >
                 Unlock Buzzers
               </button>
               <button
                 onClick={() => emit("host-lock-buzzers")}
-                disabled={state.buzzerLocked}
+                disabled={!canLockBuzzers}
                 className="admin-secondary-button danger"
               >
                 Lock Buzzers

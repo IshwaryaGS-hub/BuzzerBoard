@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import BrandMark from "../components/BrandMark";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4001";
 
@@ -54,6 +55,7 @@ export default function HomePage() {
         <div className="hero-grid home-hero-grid">
           <section className="championship-hero home-highlight home-main-hero">
             <div className="home-stage">
+              <BrandMark variant="udaan" className="brand-mark-home" />
               <div className="home-pill">
                 <span className="status-dot" />
                 Live Event Experience
