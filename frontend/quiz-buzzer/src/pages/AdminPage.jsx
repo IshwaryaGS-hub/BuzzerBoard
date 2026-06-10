@@ -22,7 +22,7 @@ export default function AdminPage() {
   const [buzzAnimTick, setBuzzAnimTick] = useState(0);
   const previousBuzzCountRef = useRef(0);
   const hostAuth = sessionStorage.getItem("hostAuth") || "";
-  const { connectionState, isConnected, isRecovering } = useSocketConnection();
+  const { isConnected, isRecovering } = useSocketConnection();
 
   const navigateTo = (path) => {
     window.history.pushState({}, "", path);
@@ -297,9 +297,6 @@ export default function AdminPage() {
         <div className="page-intro host-topbar-intro">
           <div className="page-intro-meta">
             <BrandMark variant="udaan" compact className="brand-mark-host" />
-            <div className={`connection-pill ${connectionState}`}>
-              {isConnected ? "Live connection" : isRecovering ? "Reconnecting..." : "Offline"}
-            </div>
           </div>
           <div className="page-intro-label">Host Panel</div>
           <h1 className="host-topbar-title">Quiz Control</h1>

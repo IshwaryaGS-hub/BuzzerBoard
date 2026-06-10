@@ -11,7 +11,7 @@ export default function PlayerPage() {
   const [now, setNow] = useState(Date.now());
   const timeUpHandledRef = useRef(false);
   const player = JSON.parse(sessionStorage.getItem("player") || "{}");
-  const { connectionState, isConnected, isRecovering } = useSocketConnection();
+  const { isConnected, isRecovering } = useSocketConnection();
 
   const navigateTo = useCallback((path) => {
     window.history.pushState({}, "", path);
@@ -198,14 +198,7 @@ export default function PlayerPage() {
           <div className="page-intro page-intro-centered player-intro">
             <div className="player-brand-lockup">
               <BrandMark variant="udaan" compact className="brand-mark-player" />
-              <div className={`connection-pill ${connectionState}`}>
-                {isConnected ? "Connected" : isRecovering ? "Reconnecting..." : "Offline"}
-              </div>
             </div>
-          </div>
-          <div className="status-pill player-device-pill">
-            <span className="status-dot" />
-            Player Device
           </div>
           <div className="player-team-name">{player.teamName}</div>
           <div className="player-scoreline">Current mark: {currentScore} pts</div>

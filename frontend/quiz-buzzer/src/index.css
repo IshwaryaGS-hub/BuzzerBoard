@@ -906,6 +906,82 @@ button:disabled { cursor: not-allowed; }
   line-height: 1.18;
 }
 
+.buzz-order-panel {
+  padding: 22px 24px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+  color: var(--white);
+}
+
+.buzz-order-kicker {
+  color: var(--amber);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.buzz-order-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.buzz-order-table {
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(9, 14, 28, 0.24);
+}
+
+.buzz-order-table-head,
+.buzz-order-table-row {
+  display: grid;
+  grid-template-columns: 110px 1fr 180px;
+  gap: 12px;
+  align-items: center;
+}
+
+.buzz-order-table-head {
+  padding: 14px 18px;
+  background: rgba(255,255,255,0.04);
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.buzz-order-time-head,
+.buzz-order-time {
+  text-align: right;
+}
+
+.buzz-order-table-row {
+  padding: 16px 18px;
+}
+
+.buzz-order-rank {
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.buzz-order-team,
+.buzz-order-time {
+  font-size: clamp(20px, 1.8vw, 28px);
+  font-weight: 800;
+}
+
+.buzz-order-empty {
+  padding: 20px 18px;
+  color: var(--muted);
+  font-size: 18px;
+}
+
 .stage-bottom-row {
   display: flex;
   justify-content: space-between;
@@ -2804,8 +2880,25 @@ button:disabled { cursor: not-allowed; }
   gap: clamp(8px, 1vh, 12px);
 }
 
+.frontboard-shell .frontboard-question-stage {
+  min-height: calc(100dvh - 190px);
+  align-content: start;
+}
+
 .frontboard-shell .question-stage-topbar {
   gap: 10px;
+}
+
+.frontboard-shell .frontboard-question-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.9fr);
+  gap: clamp(10px, 1vw, 16px);
+  align-items: start;
+}
+
+.frontboard-shell .frontboard-question-main {
+  display: grid;
+  gap: clamp(8px, 1vh, 10px);
 }
 
 .frontboard-shell .question-stage-card {
@@ -2837,6 +2930,50 @@ button:disabled { cursor: not-allowed; }
 .frontboard-shell .question-option-text {
   font-size: clamp(16px, 1.45vw, 22px);
   line-height: 1.08;
+}
+
+.frontboard-shell .frontboard-buzz-panel {
+  height: 100%;
+  padding: clamp(14px, 1.4vh, 18px) clamp(14px, 1.2vw, 18px);
+}
+
+.frontboard-shell .frontboard-buzz-panel .buzz-order-kicker {
+  margin-bottom: 10px;
+  font-size: clamp(10px, 0.8vw, 12px);
+}
+
+.frontboard-shell .frontboard-buzz-panel .buzz-order-meta {
+  margin-bottom: 10px;
+  font-size: clamp(11px, 0.88vw, 13px);
+}
+
+.frontboard-shell .frontboard-buzz-panel .buzz-order-table-head,
+.frontboard-shell .frontboard-buzz-panel .buzz-order-table-row {
+  grid-template-columns: 74px 1fr 104px;
+  gap: 10px;
+}
+
+.frontboard-shell .frontboard-buzz-panel .buzz-order-table-head {
+  padding: 10px 12px;
+  font-size: 10px;
+}
+
+.frontboard-shell .frontboard-buzz-panel .buzz-order-table-row {
+  padding: 10px 12px;
+}
+
+.frontboard-shell .frontboard-buzz-panel .buzz-order-rank {
+  font-size: clamp(18px, 1.5vw, 24px);
+}
+
+.frontboard-shell .frontboard-buzz-panel .buzz-order-team,
+.frontboard-shell .frontboard-buzz-panel .buzz-order-time {
+  font-size: clamp(15px, 1.15vw, 20px);
+}
+
+.frontboard-shell .frontboard-buzz-panel .buzz-order-empty {
+  padding: 16px 14px;
+  font-size: 15px;
 }
 
 .frontboard-shell .stage-category-pill,
@@ -3123,6 +3260,11 @@ button:disabled { cursor: not-allowed; }
     gap: 8px;
   }
 
+  .frontboard-shell .frontboard-question-layout {
+    grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+    gap: 10px;
+  }
+
   .frontboard-shell .question-stage-card {
     padding: 12px 14px;
     border-radius: 18px;
@@ -3152,6 +3294,17 @@ button:disabled { cursor: not-allowed; }
   .frontboard-shell .question-option-text {
     font-size: clamp(14px, 1.1vw, 18px);
     line-height: 1.05;
+  }
+
+  .frontboard-shell .frontboard-buzz-panel .buzz-order-table-head,
+  .frontboard-shell .frontboard-buzz-panel .buzz-order-table-row {
+    grid-template-columns: 64px 1fr 92px;
+    gap: 8px;
+  }
+
+  .frontboard-shell .frontboard-buzz-panel .buzz-order-team,
+  .frontboard-shell .frontboard-buzz-panel .buzz-order-time {
+    font-size: clamp(13px, 1vw, 16px);
   }
 
   .frontboard-shell .round-dashboard,
@@ -3228,6 +3381,10 @@ button:disabled { cursor: not-allowed; }
 
   .frontboard-shell .question-stage-card {
     padding: 14px 16px;
+  }
+
+  .frontboard-shell .frontboard-question-layout {
+    grid-template-columns: 1fr;
   }
 
   .frontboard-shell .question-stage-text {

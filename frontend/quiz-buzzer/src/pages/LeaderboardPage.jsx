@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { socket } from "../socket";
 import { playTimesUpAlarm } from "../utils/alarm";
 import PlayInstructions from "../components/PlayInstructions";
-import BrandMark from "../components/BrandMark";
 import useSocketConnection from "../hooks/useSocketConnection";
 import CrownBadge from "../components/CrownBadge";
 
@@ -15,7 +14,7 @@ export default function LeaderboardPage() {
   const timesUpTriggeredRef = useRef(false);
   const previousBuzzCountRef = useRef(0);
   const frontScreenAuth = sessionStorage.getItem("frontScreenAuth") || "";
-  const { connectionState, isConnected, isRecovering } = useSocketConnection();
+  const { isRecovering } = useSocketConnection();
 
   const navigateTo = (path) => {
     window.history.pushState({}, "", path);
@@ -171,58 +170,23 @@ export default function LeaderboardPage() {
     return () => window.clearTimeout(timeoutId);
   }, [showTimeUp]);
 
-  const renderBuzzOrderPanel = ({ title, subtitle, winnerName = null }) => (
+  const renderBuzzOrderPanel = ({ title, subtitle, winnerName = null, className = "" }) => (
     <div
-      style={{
-        padding: "22px 24px",
-        borderRadius: "20px",
-        border: "1px solid rgba(255,255,255,0.08)",
-        background: "rgba(255,255,255,0.04)",
-        color: "var(--white)",
-      }}
+      className={`buzz-order-panel ${className}`.trim()}
     >
-      <div style={{ color: "var(--amber)", letterSpacing: "0.22em", textTransform: "uppercase", fontSize: "12px", marginBottom: "12px" }}>
+      <div className="buzz-order-kicker">
         {title}
       </div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: "12px",
-          flexWrap: "wrap",
-          marginBottom: "14px",
-          color: "var(--muted)",
-          fontSize: "13px",
-        }}
-      >
+      <div className="buzz-order-meta">
         <span>{subtitle}</span>
         <span>Question {currentQuestionNumber}</span>
       </div>
       {state?.buzzerHistory?.length ? (
-        <div
-          style={{
-            borderRadius: "16px",
-            overflow: "hidden",
-            border: "1px solid rgba(255,255,255,0.08)",
-            background: "rgba(9, 14, 28, 0.24)",
-          }}
-        >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "110px 1fr 180px",
-              gap: "12px",
-              padding: "14px 18px",
-              background: "rgba(255,255,255,0.04)",
-              color: "var(--muted)",
-              fontSize: "12px",
-              letterSpacing: "0.18em",
-              textTransform: "uppercase",
-            }}
-          >
+        <div className="buzz-order-table">
+          <div className="buzz-order-table-head">
             <span>Order</span>
             <span>Team</span>
-            <span style={{ textAlign: "right" }}>Buzz Time</span>
+            <span className="buzz-order-time-head">Buzz Time</span>
           </div>
 
           {state.buzzerHistory.map((entry, index) => {
@@ -230,30 +194,21 @@ export default function LeaderboardPage() {
             return (
               <div
                 key={entry.id || `${entry.teamId}-${index}`}
-                className={isWinner ? "winner-row-blink" : ""}
+                className={`buzz-order-table-row ${isWinner ? "winner-row-blink" : ""}`.trim()}
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "110px 1fr 180px",
-                  gap: "12px",
-                  alignItems: "center",
-                  padding: "16px 18px",
                   borderTop: `1px solid ${isWinner || index === 0 ? "rgba(58,212,138,0.2)" : "rgba(255,255,255,0.06)"}`,
                   background: isWinner || index === 0 ? "rgba(58,212,138,0.08)" : "transparent",
                 }}
               >
-                <span style={{ fontSize: "24px", fontWeight: 900, color: isWinner || index === 0 ? "var(--green)" : "var(--amber)" }}>
+                <span className="buzz-order-rank" style={{ color: isWinner || index === 0 ? "var(--green)" : "var(--amber)" }}>
                   #{index + 1}
                 </span>
-                <span style={{ fontSize: "clamp(20px, 1.8vw, 28px)", fontWeight: 800 }}>
+                <span className="buzz-order-team">
                   {entry.teamName}
                 </span>
                 <span
-                  style={{
-                    textAlign: "right",
-                    fontSize: "clamp(20px, 1.8vw, 28px)",
-                    fontWeight: 800,
-                    color: isWinner || index === 0 ? "var(--green)" : "var(--white)",
-                  }}
+                  className="buzz-order-time"
+                  style={{ color: isWinner || index === 0 ? "var(--green)" : "var(--white)" }}
                 >
                   {(entry.timeMs / 1000).toFixed(2)}s
                 </span>
@@ -261,8 +216,8 @@ export default function LeaderboardPage() {
             );
           })}
         </div>
-      ) : (
-        <div style={{ padding: "20px 18px", color: "var(--muted)", fontSize: "18px" }}>
+        ) : (
+        <div className="buzz-order-empty">
           Waiting for the first team to buzz.
         </div>
       )}
@@ -291,12 +246,6 @@ export default function LeaderboardPage() {
           }}
         >
           <div className="page-intro">
-            <div className="page-intro-meta">
-              <BrandMark variant="udaan" compact className="brand-mark-frontboard" />
-              <div className={`connection-pill ${connectionState}`}>
-                {isConnected ? "Screen synced" : isRecovering ? "Recovering screen..." : "Offline"}
-              </div>
-            </div>
             <div className="page-intro-label">Organizer Screen</div>
             <div className="frontboard-title" style={{ fontSize: "clamp(44px, 6vw, 84px)", fontWeight: 900, lineHeight: 0.94 }}>
               LIVE <span style={{ color: "var(--amber)" }}>QUIZ BOARD</span>
@@ -447,7 +396,7 @@ export default function LeaderboardPage() {
             </div>
           </section>
         ) : showQuestionBoard && (
-          <section className="question-stage">
+          <section className="question-stage frontboard-question-stage">
             <div className="question-stage-topbar">
               <div className="stage-progress-label">
                 Question {currentQuestionNumber} / {state?.totalQuestions}
@@ -473,26 +422,31 @@ export default function LeaderboardPage() {
               />
             </div>
 
-            <div className="question-stage-card">
-              <p className="question-stage-text">{question.text}</p>
-            </div>
-
-            <div className="question-options-grid">
-              {question.options?.map((option, index) => (
-                <div key={index} className="question-option-card">
-                  <span className="question-option-badge">{["A", "B", "C", "D"][index]}</span>
-                  <span className="question-option-text">{option}</span>
+            <div className="frontboard-question-layout">
+              <div className="frontboard-question-main">
+                <div className="question-stage-card">
+                  <p className="question-stage-text">{question.text}</p>
                 </div>
-              ))}
-            </div>
 
-            {renderBuzzOrderPanel({
-              title: "Buzzer Sequence",
-              subtitle:
-                state?.phase === "answer"
-                  ? "Verbal answer round summary"
-                  : question.category || "Live Round",
-            })}
+                <div className="question-options-grid">
+                  {question.options?.map((option, index) => (
+                    <div key={index} className="question-option-card">
+                      <span className="question-option-badge">{["A", "B", "C", "D"][index]}</span>
+                      <span className="question-option-text">{option}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {renderBuzzOrderPanel({
+                title: "Buzzer Sequence",
+                subtitle:
+                  state?.phase === "answer"
+                    ? "Verbal answer round summary"
+                    : question.category || "Live Round",
+                className: "frontboard-buzz-panel",
+              })}
+            </div>
           </section>
         )}
 
