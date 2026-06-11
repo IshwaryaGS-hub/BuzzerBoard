@@ -14,12 +14,12 @@
     },
     {
       "id": "t3",
-      "name": "APAT FIRE PROTEKT",
+      "name": "APAR FIRE PROTEKT",
       "password": "firepro2026"
     },
     {
       "id": "t4",
-      "name": "APAR GREEN WIRES",
+      "name": "APAR GREENWIRE",
       "password": "greenwire2026"
     },
     {
@@ -29,17 +29,17 @@
     },
     {
       "id": "t6",
-      "name": "APAR FLEXIBLE",
+      "name": "APAR HT",
       "password": "flexible2026"
     },
     {
       "id": "t7",
-      "name": "APAR E- BEAM",
+      "name": "APAR LT",
       "password": "ebeam2026"
     },
     {
       "id": "t8",
-      "name": "APAR RUBBER",
+      "name": "APAR DC SOLAR",
       "password": "rubber2026"
     }
   ]

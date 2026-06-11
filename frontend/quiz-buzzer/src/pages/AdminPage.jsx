@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { socket } from "../socket";
-import BrandMark from "../components/BrandMark";
 import useSocketConnection from "../hooks/useSocketConnection";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4001";
@@ -295,9 +294,6 @@ export default function AdminPage() {
       <div className="host-frame">
       <div className="glass-panel host-topbar">
         <div className="page-intro host-topbar-intro">
-          <div className="page-intro-meta">
-            <BrandMark variant="udaan" compact className="brand-mark-host" />
-          </div>
           <div className="page-intro-label">Host Panel</div>
           <h1 className="host-topbar-title">Quiz Control</h1>
           <div className="page-intro-copy">Run the board, manage setup, and keep the round flow crisp from one responsive control surface.</div>

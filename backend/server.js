@@ -9,12 +9,12 @@ const QUESTIONS = require("./data/questions");
 const FIXED_TEAMS = [
   { id: "t1", name: "APAR SHAKTI", password: "shakti2026" },
   { id: "t2", name: "APAR ANUSHAKTI", password: "anushakti2026" },
-  { id: "t3", name: "APAT FIRE PROTEKT", password: "firepro2026" },
-  { id: "t4", name: "APAR GREEN WIRE", password: "greenwire2026" },
+  { id: "t3", name: "APAR FIRE PROTEKT", password: "firepro2026" },
+  { id: "t4", name: "APAR GREENWIRE", password: "greenwire2026" },
   { id: "t5", name: "APAR ALUM ANUSHAKTI", password: "alumanu2026" },
-  { id: "t6", name: "APAR FLEXIBLE", password: "flexible2026" },
-  { id: "t7", name: "APAR E- BEAM", password: "ebeam2026" },
-  { id: "t8", name: "APAR RUBBER", password: "rubber2026" },
+  { id: "t6", name: "APAR HT", password: "flexible2026" },
+  { id: "t7", name: "APAR LT", password: "ebeam2026" },
+  { id: "t8", name: "APAR DC SOLAR", password: "rubber2026" },
 ];
 
 const DATA_DIR = process.env.DATA_DIR

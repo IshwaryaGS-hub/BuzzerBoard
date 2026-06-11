@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { socket } from "../socket";
 import { playTimesUpAlarm } from "../utils/alarm";
-import BrandMark from "../components/BrandMark";
 import useSocketConnection from "../hooks/useSocketConnection";
 
 export default function PlayerPage() {
@@ -195,11 +194,6 @@ export default function PlayerPage() {
         <div
           className="glass-panel player-panel"
         >
-          <div className="page-intro page-intro-centered player-intro">
-            <div className="player-brand-lockup">
-              <BrandMark variant="udaan" compact className="brand-mark-player" />
-            </div>
-          </div>
           <div className="player-team-name">{player.teamName}</div>
           <div className="player-scoreline">Current mark: {currentScore} pts</div>
           <div className="player-metrics">
