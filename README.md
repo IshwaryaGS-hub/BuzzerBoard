@@ -1,4 +1,4 @@
-# BuzzerBoard - Quiz Buzzer Game
+# BuzzerBoard - Quiz Buzzer Game for APAAR SOLUTIONS
 
 A real-time interactive quiz buzzer game application built with Node.js backend and React frontend. Perfect for team competitions, game shows, and interactive learning sessions.
 
@@ -212,18 +212,6 @@ npm run build
 - Socket.io for event-driven architecture
 - CSS modules for styling isolation
 
-## License
-
-[Add your license information here]
-
-## Contributing
-
-[Add contribution guidelines here]
-
-## Support
-
-For issues or questions, please open an issue in the repository.
-
----
+----
 
 **Happy Gaming! 🎉**
